@@ -21,7 +21,7 @@ import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 public class TokenVerificationSecurity {
-    public static final String USERNAME = "lookahead-platform-verifier";
+    public static final String USERNAME = "lookahead-domain-verifier";
     private final byte[] expectedSecret;
     public TokenVerificationSecurity(@Value("${app.identity.verifier-secret}") String secret,
             @Value("${app.oauth.client-secret}") String gatewaySecret) {

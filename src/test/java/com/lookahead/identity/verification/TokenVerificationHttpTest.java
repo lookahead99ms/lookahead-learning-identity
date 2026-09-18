@@ -75,8 +75,8 @@ class TokenVerificationHttpTest {
                 .send(request.POST(HttpRequest.BodyPublishers.ofString("token=" + token)).build(), HttpResponse.BodyHandlers.ofString());
     }
     @Test void privateEndpointRequiresItsOwnCredentialsAndNeverRedirects() throws Exception {
-        for (String credentials : new String[]{null, "lookahead-platform-verifier:wrong",
-                "lookahead-platform-verifier:synthetic-gateway-secret-with-32-characters",
+        for (String credentials : new String[]{null, "lookahead-domain-verifier:wrong",
+                "lookahead-domain-verifier:synthetic-gateway-secret-with-32-characters",
                 "lookahead-web-gateway:synthetic-verifier-secret-with-32-characters"}) {
             var response = send(credentials, "bad");
             assertThat(response.statusCode()).isEqualTo(401);
@@ -85,14 +85,14 @@ class TokenVerificationHttpTest {
         }
     }
     @Test void invalidTokensReturnInactiveWithoutCsrfOrSessionAndWithoutParserDetails() throws Exception {
-        var response = send("lookahead-platform-verifier:synthetic-verifier-secret-with-32-characters", "bad");
+        var response = send("lookahead-domain-verifier:synthetic-verifier-secret-with-32-characters", "bad");
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).isEqualTo("{\"active\":false}");
         assertThat(response.headers().firstValue("cache-control")).contains("no-store");
         assertThat(response.headers().firstValue("set-cookie")).isEmpty();
     }
     @Test void storageFailureReturnsSafe503() throws Exception {
-        var response = send("lookahead-platform-verifier:synthetic-verifier-secret-with-32-characters", "outage");
+        var response = send("lookahead-domain-verifier:synthetic-verifier-secret-with-32-characters", "outage");
         assertThat(response.statusCode()).isEqualTo(503);
         assertThat(response.body()).contains("ACCOUNT_STORAGE_UNAVAILABLE").doesNotContain("private SQL", "outage");
         assertThat(response.headers().firstValue("cache-control")).contains("no-store");

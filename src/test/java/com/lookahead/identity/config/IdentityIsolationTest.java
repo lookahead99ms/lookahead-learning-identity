@@ -22,7 +22,8 @@ class IdentityIsolationTest {
         assertThatCode(() -> new IdentityModeGuard(environment())).doesNotThrowAnyException();
         var env = environment(); env.setActiveProfiles("accounts");
         assertThatThrownBy(() -> new IdentityModeGuard(env)).isInstanceOf(IllegalStateException.class);
-        for (String role : new String[]{"gateway", "platform", "resource", "resource-server"}) {
+        // The retired Domain API profile must remain rejected as well.
+        for (String role : new String[]{"gateway", "domain-api", "platform", "resource", "resource-server"}) {
             var invalid = environment(); invalid.addActiveProfile(role);
             assertThatThrownBy(() -> new IdentityModeGuard(invalid)).isInstanceOf(IllegalStateException.class);
         }
@@ -43,7 +44,7 @@ class IdentityIsolationTest {
         var candidateCookie = environment().withProperty("server.servlet.session.cookie.name", "LOOKAHEAD_CANDIDATE_IDENTITY");
         assertThatCode(() -> new IdentityModeGuard(candidateCookie)).doesNotThrowAnyException();
     }
-    @Test void databaseCannotUseTheLegacyOrPlatformOrMigrationRole() {
+    @Test void databaseRejectsLegacyRolesOtherServicesAndMigrationRole() {
         for (String role : new String[]{"lookahead_app", "lookahead_platform_app", "lookahead_identity_migrator", "postgres"})
             assertThatThrownBy(() -> new AccountDatabaseConfiguration().accountDataSource(
                     "jdbc:postgresql://localhost/not-connected", role, "synthetic-secret", 3, 3000, 2000))
