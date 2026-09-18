@@ -7,9 +7,13 @@ import org.springframework.stereotype.Component;
 
 @Component
 public final class IdentityModeGuard {
+    // Reject the old Domain API profile as well as its current name during migration.
+    private static final String LEGACY_DOMAIN_PROFILE = "platform";
+
     public IdentityModeGuard(Environment environment) {
         if (!environment.acceptsProfiles(Profiles.of("accounts & oauth-server"))
-                || environment.acceptsProfiles(Profiles.of("gateway | platform | resource | resource-server")))
+                || environment.acceptsProfiles(Profiles.of("gateway | domain-api | resource | resource-server"))
+                || environment.acceptsProfiles(Profiles.of(LEGACY_DOMAIN_PROFILE)))
             throw new IllegalStateException("Identity requires accounts and oauth-server exclusively");
         String deployment = environment.getProperty("app.deployment-environment", "");
         if (!Set.of("local", "dev", "prod").contains(deployment))

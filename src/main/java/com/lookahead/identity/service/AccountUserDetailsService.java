@@ -19,7 +19,7 @@ public class AccountUserDetailsService implements UserDetailsService {
     public AccountUserDetailsService(AccountRepository accounts) { this.accounts = accounts; }
 
     public AccountView accountView(AccountPrincipal principal) {
-        // Identity facts only. Product permissions are composed by Platform /api/v1/auth/me after OAuth.
+        // Identity facts only. Product permissions are composed by Learning Domain API /api/v1/auth/me after OAuth.
         return new AccountView(principal.accountId(), principal.getUsername(), principal.displayName(),
                 java.util.Set.of(), java.util.Set.of(), false);
     }

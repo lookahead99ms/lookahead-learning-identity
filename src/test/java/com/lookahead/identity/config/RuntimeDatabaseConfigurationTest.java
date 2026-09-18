@@ -7,6 +7,7 @@ import java.sql.Statement;
 import java.util.List;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockMakers;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -51,7 +52,7 @@ class RuntimeDatabaseConfigurationTest {
     }
 
     @Test void everyNewPhysicalConnectionMustPassTheRuntimeGuardBeforeItCanBeBorrowed() throws Exception {
-        var upstream = mock(DataSource.class);
+        var upstream = mock(DataSource.class, withSettings().mockMaker(MockMakers.PROXY));
         var first = physicalConnection(); var second = physicalConnection();
         when(upstream.getConnection(anyString(), anyString())).thenReturn(first, second);
         try (var source = configured(BASE)) {
@@ -65,7 +66,7 @@ class RuntimeDatabaseConfigurationTest {
     }
 
     @Test void aRejectedActualDatabaseIdentityNeverEntersTheConnectionPool() throws Exception {
-        var upstream = mock(DataSource.class); var connection = physicalConnection();
+        var upstream = mock(DataSource.class, withSettings().mockMaker(MockMakers.PROXY)); var connection = physicalConnection();
         when(upstream.getConnection(anyString(), anyString())).thenReturn(connection);
         when(connection.createStatement().execute(anyString())).thenThrow(
                 new SQLException("Runtime database role violates application isolation", "42501"));
@@ -77,9 +78,11 @@ class RuntimeDatabaseConfigurationTest {
         }
     }
 
+    // JDBC contracts are interfaces; proxy mocks avoid mixed inline/subclass instrumentation.
     private static Connection physicalConnection() throws Exception {
-        var connection = mock(Connection.class);
-        when(connection.createStatement()).thenReturn(mock(Statement.class));
+        var connection = mock(Connection.class, withSettings().mockMaker(MockMakers.PROXY));
+        var statement = mock(Statement.class, withSettings().mockMaker(MockMakers.PROXY));
+        when(connection.createStatement()).thenReturn(statement);
         when(connection.getAutoCommit()).thenReturn(true);
         when(connection.getTransactionIsolation()).thenReturn(Connection.TRANSACTION_READ_COMMITTED);
         when(connection.isValid(anyInt())).thenReturn(true);

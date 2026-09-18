@@ -13,7 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Synthetic identity fixtures only; grants are seeded by Platform using these stable subjects. */
+/** Synthetic identity fixtures only; grants are seeded by Learning Domain API using these stable subjects. */
 @Component
 @Profile("accounts & local-test")
 @ConditionalOnProperty(name = "app.local-test.seed-enabled", havingValue = "true")

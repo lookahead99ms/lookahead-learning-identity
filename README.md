@@ -6,10 +6,10 @@ grants, plans, support delivery or curriculum loader. The legacy root applicatio
 remains a separate compatibility baseline; this candidate does not migrate or
 replace its running database automatically.
 
-Build from the sibling `lookahead-learning-backend` directory with `./mvnw -pl :identity-app -am verify`.
+Build from the sibling `lookahead-learning-toolkit` directory with `./mvnw -pl :identity-app -am verify`.
 The executable is `../lookahead-learning-identity/target/lookahead-identity.jar`, with main class
 `com.lookahead.identity.IdentityApplication`. Every launch includes `accounts` and
-`oauth-server`; Gateway/Platform profiles are rejected. Choose `local`, `dev`, or
+`oauth-server`; Gateway/Learning Domain API profiles are rejected. Choose `local`, `dev`, or
 `prod` explicitly, with the matching canonical `app.deployment-environment` value.
 Long-form aliases and contradictory environment profiles are rejected. Local fixtures additionally require `local-test`,
 `app.local-test.seed-enabled=true`, and a guarded seed password. The optional
@@ -32,7 +32,7 @@ in this application.
 | `app.oauth.client-secret` / `LOOKAHEAD_GATEWAY_CLIENT_SECRET` | Gateway client credential, distinct from verifier credential |
 | `app.oauth.signing-private-key` / `LOOKAHEAD_SIGNING_PRIVATE_KEY` | RSA private PEM, at least 3072 bits |
 | `app.oauth.signing-public-key` / `LOOKAHEAD_SIGNING_PUBLIC_KEY` | Matching public PEM |
-| `app.identity.verifier-secret` / `LOOKAHEAD_IDENTITY_VERIFIER_SECRET` | Separate Platform verification credential, at least 32 characters |
+| `app.identity.verifier-secret` / `LOOKAHEAD_IDENTITY_VERIFIER_SECRET` | Separate Learning Domain API verification credential, at least 32 characters |
 | `LOOKAHEAD_REGISTRATION_ENABLED` | Explicitly enable registration/password account login |
 | `server.servlet.session.cookie.name` / `LOOKAHEAD_IDENTITY_COOKIE_NAME` | Defaults to `LOOKAHEAD_SESSION`; configure a unique candidate cookie and the same name in Gateway |
 
@@ -50,7 +50,7 @@ cookies and do not enable synthetic identities. Infra can explicitly set
 using the `local` profile binds to loopback.
 
 The private verification endpoint is `POST /internal/v1/tokens/verify`, accepting
-form field `token`. It requires HTTP Basic username `lookahead-platform-verifier`
+form field `token`. It requires HTTP Basic username `lookahead-domain-verifier`
 with `app.identity.verifier-secret`. It is stateless and does not use browser
 cookies or CSRF. Keep it off public edge routing and protect its transport in
 production. Browser-facing login, registration, continuation, OAuth and logout
@@ -68,9 +68,9 @@ Login/registration and Identity `/api/v1/auth/me` return identity facts with emp
 product grants and `authorPreview=false`. **This is not an authoritative product
 access response.** In the existing frontend OAuth mode the login/registration
 body is ignored and navigation continues through OAuth. After establishing the
-BFF session, Platform `/api/v1/auth/me` supplies current grants and author access.
+BFF session, Learning Domain API `/api/v1/auth/me` supplies current grants and author access.
 Do not wire a legacy non-OAuth client to this response and infer revoked access.
-Identity never calls Platform to compose its login response.
+Identity never calls Learning Domain API to compose its login response.
 
 ## Fresh database migration
 
