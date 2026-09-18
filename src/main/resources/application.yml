@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: lookahead-identity
+  profiles:
+    include: [accounts, oauth-server]
+  config:
+    import: optional:configtree:${LOOKAHEAD_SECRETS_DIRECTORY:/run/secrets/}
+  flyway:
+    enabled: false
+  datasource:
+    url: ${LOOKAHEAD_IDENTITY_JDBC_URL}
+    username: lookahead_identity_app
+    password: ${LOOKAHEAD_IDENTITY_DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 6
+      connection-timeout: 3000
+      validation-timeout: 2000
+server:
+  address: ${LOOKAHEAD_BIND_ADDRESS:127.0.0.1}
+  port: ${PORT:8080}
+  forward-headers-strategy: none
+  shutdown: graceful
+  tomcat:
+    max-http-form-post-size: 32KB
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        name: ${LOOKAHEAD_IDENTITY_COOKIE_NAME:LOOKAHEAD_SESSION}
+        http-only: true
+        same-site: lax
+        secure: true
+app:
+  version: "0.0.1-SNAPSHOT"
+  deployment-environment: ${LOOKAHEAD_ENVIRONMENT}
+  accounts:
+    registration-enabled: ${LOOKAHEAD_REGISTRATION_ENABLED:false}
+  local-test:
+    seed-enabled: false
+    author-enabled: false
+  identity:
+    verifier-secret: ${LOOKAHEAD_IDENTITY_VERIFIER_SECRET:}
+  oauth:
+    issuer: ${LOOKAHEAD_OAUTH_ISSUER:}
+    frontend: ${LOOKAHEAD_FRONTEND_ORIGIN:}
+    client-id: ${APP_OAUTH_CLIENT_ID:lookahead-web-gateway}
+    client-secret: ${LOOKAHEAD_GATEWAY_CLIENT_SECRET:}
+    signing-private-key: ${LOOKAHEAD_SIGNING_PRIVATE_KEY:/run/secrets/oauth-signing-private.pem}
+    signing-public-key: ${LOOKAHEAD_SIGNING_PUBLIC_KEY:/run/secrets/oauth-signing-public.pem}
+  cors:
+    allowed-origins:
+      - ${LOOKAHEAD_FRONTEND_ORIGIN:http://localhost:4200}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      group:
+        readiness:
+          include: readinessState,identityDatabase
+logging:
+  level:
+    root: INFO
