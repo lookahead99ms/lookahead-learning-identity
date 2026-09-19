@@ -50,8 +50,11 @@ public class RegistrationService {
         if (email.length() > 254 || !email.matches("[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\\.[A-Za-z]{2,63}")
                 || email.contains("..") || email.startsWith(".") || email.contains(".@"))
             throw invalid("Provide a valid email address.");
-        if (request.password() == null || request.password().length() < 12 || request.password().length() > 128)
-            throw invalid("Use a password with 12 to 128 characters.");
+        try { com.lookahead.identity.validator.NewPasswordPolicy.validate(request.password()); }
+        catch (AccountFailure invalidPassword) {
+            if ("PASSWORD_TOO_COMMON".equals(invalidPassword.code())) throw invalidPassword;
+            throw invalid(invalidPassword.getMessage());
+        }
         if (!request.password().equals(request.confirmPassword())) throw invalid("Passwords must match.");
         if (request.countryCode() == null || !COUNTRIES.contains(request.countryCode()))
             throw invalid("Choose your country of residence from the country list.");

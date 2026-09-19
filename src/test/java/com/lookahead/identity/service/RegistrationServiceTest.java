@@ -38,6 +38,14 @@ class RegistrationServiceTest {
         verifyNoMoreInteractions(jdbc);
         assertThat(valid().toString()).doesNotContain(valid().password(), valid().email());
     }
+    @Test void registrationUsesTheSameFullUnicodePasswordPolicy() {
+        for(String password:new String[]{"x".repeat(14),"x".repeat(129),"x".repeat(15)+"\uD800","password123456789"}) {
+            var request=new RegistrationRequest("Avery","Learner","a@example.test",password,password,"US");
+            assertThatThrownBy(()->RegistrationService.validate(request)).isInstanceOf(AccountFailure.class);
+        }
+        String password="😀".repeat(128);
+        assertThatCode(()->RegistrationService.validate(new RegistrationRequest("Avery","Learner","a@example.test",password,password,"US"))).doesNotThrowAnyException();
+    }
     @Test void duplicateIdentityDoesNotReturnDatabaseDetails() {
         var jdbc = mock(JdbcTemplate.class);
         when(jdbc.update(anyString(), any(Object[].class))).thenThrow(new DuplicateKeyException("private database detail"));

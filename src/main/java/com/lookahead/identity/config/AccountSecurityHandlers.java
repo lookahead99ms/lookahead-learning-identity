@@ -40,7 +40,17 @@ public class AccountSecurityHandlers {
 
     void loginSucceeded(HttpServletRequest request, HttpServletResponse response,
                         Authentication authentication) throws IOException {
-        write(response, 200, ApiResponse.success(users.accountView((AccountPrincipal) authentication.getPrincipal())));
+        try {
+            write(response, 200, ApiResponse.success(users.accountView((AccountPrincipal) authentication.getPrincipal())));
+        } catch (com.lookahead.identity.exception.AccountFailure stale) {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+            var session=request.getSession(false); if(session!=null)session.invalidate();
+            error(request,response,401,"AUTHENTICATION_REQUIRED","Sign in to continue");
+        } catch (org.springframework.dao.DataAccessException unavailable) {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+            var session=request.getSession(false); if(session!=null)session.invalidate();
+            error(request,response,503,"ACCOUNT_STORAGE_UNAVAILABLE","Account storage is temporarily unavailable");
+        }
     }
 
     void loginFailed(HttpServletRequest request, HttpServletResponse response,

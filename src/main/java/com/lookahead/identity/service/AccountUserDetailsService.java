@@ -20,7 +20,9 @@ public class AccountUserDetailsService implements UserDetailsService {
 
     public AccountView accountView(AccountPrincipal principal) {
         // Identity facts only. Product permissions are composed by Learning Domain API /api/v1/auth/me after OAuth.
-        return new AccountView(principal.accountId(), principal.getUsername(), principal.displayName(),
+        var current = accounts.findById(principal.accountId()).filter(a -> a.enabled() && a.credentialEpoch() == principal.credentialEpoch())
+                .orElseThrow(() -> new com.lookahead.identity.exception.AccountFailure(401,"AUTHENTICATION_REQUIRED","Sign in to continue"));
+        return new AccountView(current.accountId(), current.username(), current.displayName(),
                 java.util.Set.of(), java.util.Set.of(), false);
     }
 
@@ -37,6 +39,6 @@ public class AccountUserDetailsService implements UserDetailsService {
         if (!syntheticAllowed && !accounts.hasRegistrationProfile(account.accountId()))
             throw new UsernameNotFoundException("Invalid credentials");
         return new AccountPrincipal(account.accountId(), account.username(), account.displayName(),
-                account.passwordHash(), account.enabled());
+                account.passwordHash(), account.enabled(), account.credentialEpoch());
     }
 }

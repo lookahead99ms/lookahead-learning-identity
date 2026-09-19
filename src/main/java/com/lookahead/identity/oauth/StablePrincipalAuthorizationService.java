@@ -25,7 +25,8 @@ public final class StablePrincipalAuthorizationService implements OAuth2Authoriz
             var user=User.withUsername(principal.getUsername()).password("").authorities(principal.getAuthorities()).build();
             var stored=UsernamePasswordAuthenticationToken.authenticated(user,null,user.getAuthorities());
             var builder=OAuth2Authorization.from(authorization).principalName(principal.accountId().toString())
-                    .attribute(Principal.class.getName(),stored);
+                    .attribute(Principal.class.getName(),stored)
+                    .attribute(EpochAuthorizationService.EPOCH,Long.toString(principal.credentialEpoch()));
             // Bind logout to the actual authorizing browser session, not the latest session for this user.
             if(RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes) {
                 var session=attributes.getRequest().getSession(false);

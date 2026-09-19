@@ -33,12 +33,13 @@ public class AccountSecurityConfig {
     @org.springframework.core.annotation.Order(3)
     SecurityFilterChain accountSecurity(HttpSecurity http, AccountUserDetailsService users,
                                         PasswordEncoder encoder, AccountSecurityHandlers handlers, AccountSecurityProperties properties, Environment environment,
-                                        LocalTestSeedGuard localTestGuard) throws Exception {
+                                        LocalTestSeedGuard localTestGuard, com.lookahead.identity.repository.AccountRepository accounts) throws Exception {
         boolean localPasswordLogin = environment.acceptsProfiles(Profiles.of("local-test"))
                 && "local".equals(environment.getProperty("app.deployment-environment"))
                 && !environment.acceptsProfiles(Profiles.of("prod", "production"));
         boolean registrationEnabled = properties.registrationEnabled();
         boolean passwordLogin = localPasswordLogin || registrationEnabled;
+        http.addFilterAfter(new com.lookahead.identity.filter.CredentialEpochFilter(accounts), org.springframework.security.web.context.SecurityContextHolderFilter.class);
         http.cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.csrfTokenRepository(new HttpSessionCsrfTokenRepository()))
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
@@ -55,7 +56,7 @@ public class AccountSecurityConfig {
                                 "/actuator/health", "/actuator/health/**", "/actuator/info",
                                 "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/api/v1/auth/logout").permitAll()
-                        .requestMatchers("/api/v1/auth/continue", "/api/v1/auth/me").authenticated()
+                        .requestMatchers("/api/v1/auth/continue", "/api/v1/auth/me", "/api/v1/account/profile", "/api/v1/account/password").authenticated()
                         .anyRequest().denyAll();
                 })
                 .exceptionHandling(errors -> errors

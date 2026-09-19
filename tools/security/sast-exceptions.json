@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "exceptions": [
+    {
+      "ruleId": "java/spring-disabled-csrf-protection",
+      "file": "src/main/java/com/lookahead/identity/verification/TokenVerificationSecurity.java",
+      "sourceSha256": "fef62ffb06e6409c16c6ad2576573de53fc149cafccd1bab3da16591c8a5a114",
+      "expiresAt": "2026-10-19",
+      "ticket": "DLV-804",
+      "rationale": "This stateless internal token-verification chain accepts only service HTTP Basic credentials, never browser cookies; CSRF does not protect credentialed non-browser clients."
+    }
+  ]
+}
