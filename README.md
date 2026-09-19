@@ -1,4 +1,4 @@
-# Identity application candidate
+# Look Ahead Learning Identity
 
 This executable owns password authentication, registration identity/profile data,
 OAuth clients, authorizations, consents and signing keys. It contains no product
@@ -6,9 +6,65 @@ grants, plans, support delivery or curriculum loader. The legacy root applicatio
 remains a separate compatibility baseline; this candidate does not migrate or
 replace its running database automatically.
 
-Build from the sibling `lookahead-learning-toolkit` directory with `./mvnw -pl :identity-app -am verify`.
-The executable is `../lookahead-learning-identity/target/lookahead-identity.jar`, with main class
-`com.lookahead.identity.IdentityApplication`. Every launch includes `accounts` and
+## Independent build
+
+Install a Java 21 JDK, then run from this repository:
+
+```sh
+./gradlew --no-daemon clean test bootJar
+```
+
+The committed wrapper downloads Gradle 9.6.1 and verifies its official SHA-256.
+Spring Boot 4.1.1 provides dependency versions, and `gradle.lockfile` pins the
+resolved dependencies. Only public Gradle plugin and Maven Central repositories
+are used. No sibling checkout, Toolkit JAR, private artifact registry or
+pre-populated Maven cache is required. Windows users can run `gradlew.bat`.
+
+The executable is `build/libs/lookahead-identity.jar`, with main class
+`com.lookahead.identity.IdentityApplication`. Test results are under
+`build/reports/tests/test/`. To deliberately refresh dependency locks after a
+reviewed dependency change, run `./gradlew clean test bootJar --write-locks` and
+review the lock diff.
+
+The five transport records in `com.lookahead.learning.content.dto` are owned by
+this application. The historical package is preserved for compatibility; it does
+not imply a shared library dependency. `IdentityJsonContractTest` verifies the
+public JSON shapes with Spring Boot's configured mapper, including nulls,
+timestamps, IDs, grants and credential exclusion. Cross-service verification is
+orchestrated separately; passing these tests is not proof of a complete OAuth
+journey.
+
+## Run and container build
+
+Identity is independently buildable, but real authentication requires its
+PostgreSQL database, application-owned schema migration, restricted database
+roles, externally supplied signing keys and OAuth/verifier configuration. It does
+not start an in-memory database or silently create demo users. Supply the
+configuration below, then run:
+
+```sh
+java -jar build/libs/lookahead-identity.jar --spring.profiles.active=local
+```
+
+Build an image using only this application's checkout:
+
+```sh
+docker build --tag lookahead-identity:local .
+```
+
+The build runs the tests and packages the executable. The runtime image uses Java
+21, UID/GID 10001, `/opt/lookahead/app.jar` and port 8080. It includes a Java-only
+readiness probe at `/opt/lookahead/health` and checks
+`/actuator/health/readiness`. Credentials and keys must be supplied at runtime,
+never through image build arguments. Bind any development host ports to loopback.
+The private Infra repository owns the integrated local environment and database
+lifecycle; it is not required to compile or test this application.
+
+GitHub Actions runs the wrapper checksum check, tests, packaging and standalone
+Docker build with read-only repository permissions. It does not publish an image
+or deploy resources.
+
+Every launch includes `accounts` and
 `oauth-server`; Gateway/Learning Domain API profiles are rejected. Choose `local`, `dev`, or
 `prod` explicitly, with the matching canonical `app.deployment-environment` value.
 Long-form aliases and contradictory environment profiles are rejected. Local fixtures additionally require `local-test`,
