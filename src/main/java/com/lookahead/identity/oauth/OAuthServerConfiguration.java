@@ -18,7 +18,8 @@ public class OAuthServerConfiguration {
     @Bean AuthorizationServerSettings authorizationServerSettings(OAuthSettings settings) {
         return AuthorizationServerSettings.builder().issuer(settings.issuer()).build();
     }
-    @Bean @Order(1) SecurityFilterChain oauthAuthorizationSecurity(HttpSecurity http, OAuthSettings settings) throws Exception {
+    @Bean @Order(1) SecurityFilterChain oauthAuthorizationSecurity(HttpSecurity http, OAuthSettings settings, com.lookahead.identity.repository.AccountRepository accounts) throws Exception {
+        http.addFilterAfter(new com.lookahead.identity.filter.CredentialEpochFilter(accounts), org.springframework.security.web.context.SecurityContextHolderFilter.class);
         var server=new OAuth2AuthorizationServerConfigurer();
         http.securityMatcher(server.getEndpointsMatcher())
                 .with(server,configurer->configurer.oidc(oidc->oidc.logoutEndpoint(logout->logout

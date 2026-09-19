@@ -22,18 +22,18 @@ public class AccountRepository {
     }
 
     public Optional<AccountCredentials> findById(UUID id) {
-        var rows=jdbc.query("SELECT id,username,display_name,enabled FROM accounts WHERE id=?",
-                (row,index)->new AccountCredentials(row.getObject("id",UUID.class),row.getString("username"),row.getString("display_name"),null,row.getBoolean("enabled")),id);
+        var rows=jdbc.query("SELECT id,username,display_name,enabled,credential_epoch FROM accounts WHERE id=?",
+                (row,index)->new AccountCredentials(row.getObject("id",UUID.class),row.getString("username"),row.getString("display_name"),null,row.getBoolean("enabled"),row.getLong("credential_epoch")),id);
         return rows.stream().findFirst();
     }
 
     public Optional<AccountCredentials> findByUsername(String username) {
         var accounts = jdbc.query("""
-                SELECT id, username, display_name, password_hash, enabled
+                SELECT id, username, display_name, password_hash, enabled, credential_epoch
                 FROM accounts WHERE username = ?
                 """, (row, index) -> new AccountCredentials(row.getObject("id", UUID.class),
                 row.getString("username"), row.getString("display_name"),
-                row.getString("password_hash"), row.getBoolean("enabled")), username);
+                row.getString("password_hash"), row.getBoolean("enabled"), row.getLong("credential_epoch")), username);
         return accounts.size() == 1 ? Optional.of(accounts.getFirst()) : Optional.empty();
     }
 }

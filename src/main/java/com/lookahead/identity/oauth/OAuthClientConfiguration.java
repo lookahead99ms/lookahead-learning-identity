@@ -48,7 +48,7 @@ public class OAuthClientConfiguration {
     @Bean OAuth2AuthorizationService authorizations(JdbcTemplate jdbc, RegisteredClientRepository clients,
             org.springframework.transaction.PlatformTransactionManager transactions) {
         return new TransactionalAuthorizationService(
-                new StablePrincipalAuthorizationService(new JdbcOAuth2AuthorizationService(jdbc,clients)), transactions);
+                new StablePrincipalAuthorizationService(new EpochAuthorizationService(new JdbcOAuth2AuthorizationService(jdbc,clients), jdbc, transactions)), transactions);
     }
     @Bean OAuth2AuthorizationConsentService consents(JdbcTemplate jdbc, RegisteredClientRepository clients) {
         return new JdbcOAuth2AuthorizationConsentService(jdbc,clients);

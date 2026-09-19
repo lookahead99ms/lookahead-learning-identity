@@ -47,6 +47,7 @@ class RegistrationSecurityIntegrationTest {
                 return Optional.of(new AccountCredentials(email.equals("synthetic") ? syntheticId : registeredId, email, "Avery Learner", hash, true));
             });
             when(repo.hasRegistrationProfile(registeredId)).thenReturn(true);
+            when(repo.findById(any(UUID.class))).thenAnswer(call -> Optional.of(new AccountCredentials(call.getArgument(0), "avery@example.test", "Avery Learner", null, true)));
             return repo;
         }
     }
@@ -79,5 +80,35 @@ class RegistrationSecurityIntegrationTest {
         var client=client(new CookieManager(null,CookiePolicy.ACCEPT_ALL));
         assertThat(request(client,"POST","/login","username=synthetic&password=long+test+passphrase",token(client),"application/x-www-form-urlencoded").statusCode()).isEqualTo(401);
         assertThat(request(client,"POST","/login","username=avery%40example.test&password=long+test+passphrase",token(client),"application/x-www-form-urlencoded").statusCode()).isEqualTo(200);
+    }
+
+    @Test void loginRejectsMissingAndOtherSessionCsrfBeforeAcceptingItsOwnToken() throws Exception {
+        var firstBrowser = client(new CookieManager(null, CookiePolicy.ACCEPT_ALL));
+        var secondBrowser = client(new CookieManager(null, CookiePolicy.ACCEPT_ALL));
+        String firstToken = token(firstBrowser);
+        String secondToken = token(secondBrowser);
+        String credentials = "username=avery%40example.test&password=long+test+passphrase";
+        String formType = "application/x-www-form-urlencoded";
+        assertThat(firstToken).isNotBlank();
+        assertThat(secondToken).isNotBlank().isNotEqualTo(firstToken);
+
+        var missing = request(secondBrowser, "POST", "/login", credentials, null, formType);
+        assertThat(missing.statusCode()).isEqualTo(403);
+        assertThat(missing.body()).contains("CSRF_INVALID");
+        assertThat(request(secondBrowser, "GET", "/me", null, null, null).statusCode()).isEqualTo(401);
+
+        var borrowed = request(secondBrowser, "POST", "/login", credentials, firstToken, formType);
+        assertThat(borrowed.statusCode()).isEqualTo(403);
+        assertThat(borrowed.body()).contains("CSRF_INVALID");
+        assertThat(request(secondBrowser, "GET", "/me", null, null, null).statusCode()).isEqualTo(401);
+
+        var accepted = request(secondBrowser, "POST", "/login", credentials, secondToken, formType);
+        assertThat(accepted.statusCode()).isEqualTo(200);
+        assertThat(accepted.body()).contains("avery@example.test").doesNotContain("password", "passphrase");
+        assertThat(request(secondBrowser, "GET", "/me", null, null, null).statusCode()).isEqualTo(200);
+        assertThat(request(firstBrowser, "GET", "/me", null, null, null).statusCode()).isEqualTo(401);
+
+        assertThat(request(secondBrowser, "POST", "/logout", "", token(secondBrowser), formType).statusCode()).isEqualTo(204);
+        assertThat(request(secondBrowser, "GET", "/me", null, null, null).statusCode()).isEqualTo(401);
     }
 }

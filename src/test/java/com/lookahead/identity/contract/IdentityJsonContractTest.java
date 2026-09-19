@@ -60,7 +60,9 @@ class IdentityJsonContractTest {
     void identityProjectionNeverSerializesCredentialsOrProductPrivileges() {
         var principal = new AccountPrincipal(ACCOUNT_ID, "learner@example.test", "Learner",
                 "synthetic-password-hash-not-for-a-real-account", true);
-        var users = new AccountUserDetailsService(mock(AccountRepository.class));
+        var repository = mock(AccountRepository.class);
+        org.mockito.Mockito.when(repository.findById(ACCOUNT_ID)).thenReturn(java.util.Optional.of(new com.lookahead.identity.model.AccountCredentials(ACCOUNT_ID,"learner@example.test","Learner",null,true)));
+        var users = new AccountUserDetailsService(repository);
         String json = mapper.writeValueAsString(users.accountView(principal));
         assertThat(mapper.readTree(json)).isEqualTo(mapper.readTree("""
                 {"accountId":"00000000-0000-0000-0000-000000000001",

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "exceptions": [
+    {
+      "RuleID": "generic-api-key",
+      "File": "src/test/java/com/lookahead/identity/verification/TokenVerificationHttpTest.java",
+      "StartLine": 36,
+      "Commit": "01a35037b8e272eb85b90e9c84dfff57a849589f",
+      "rationale": "This immutable public-history test fixture is an explicit synthetic Spring property value and is not accepted by any deployed environment as a credential. Current and future findings remain blocking."
+    }
+  ]
+}

@@ -25,7 +25,7 @@ public class AccountRequestLimitsFilter extends OncePerRequestFilter {
     private final JsonFactory json = JsonFactory.builder().streamReadConstraints(
             StreamReadConstraints.builder().maxNestingDepth(32).maxStringLength(MAX_BYTES).build()).build();
     @Override protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().equals("/api/v1/auth/register") || !"POST".equals(request.getMethod());
+        return !java.util.Set.of("/api/v1/auth/register", "/api/v1/account/profile", "/api/v1/account/password").contains(request.getRequestURI()) || !"POST".equals(request.getMethod());
     }
     @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
