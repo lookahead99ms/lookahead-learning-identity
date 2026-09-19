@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockMakers;
 import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.env.MockEnvironment;
@@ -23,8 +24,10 @@ class LocalIdentitySeederTest {
         return environment;
     }
     @Test void fixturesUseStableSubjectsAndOnlyWriteIdentityRows() {
-        var jdbc = mock(JdbcTemplate.class);
-        var encoder = mock(PasswordEncoder.class);
+        // This test needs no final-method interception. Explicit makers avoid an
+        // inline-mock handler assertion on the Linux Java 21 container runtime.
+        var jdbc = mock(JdbcTemplate.class, withSettings().mockMaker(MockMakers.SUBCLASS));
+        var encoder = mock(PasswordEncoder.class, withSettings().mockMaker(MockMakers.PROXY));
         when(encoder.encode(anyString())).thenReturn("synthetic-password-hash");
         when(jdbc.queryForList(anyString(), eq(UUID.class), anyString())).thenReturn(List.of());
         var environment = environment();
@@ -41,10 +44,11 @@ class LocalIdentitySeederTest {
         });
     }
     @Test void conflictingReservedIdentityDoesNotGetOverwritten() {
-        var jdbc = mock(JdbcTemplate.class);
+        var jdbc = mock(JdbcTemplate.class, withSettings().mockMaker(MockMakers.SUBCLASS));
         when(jdbc.queryForList(anyString(), eq(UUID.class), eq("learner01"))).thenReturn(List.of(UUID.randomUUID()));
         var environment = environment();
-        assertThatThrownBy(() -> new LocalIdentitySeeder(jdbc, mock(PasswordEncoder.class), environment,
+        assertThatThrownBy(() -> new LocalIdentitySeeder(jdbc,
+                mock(PasswordEncoder.class, withSettings().mockMaker(MockMakers.PROXY)), environment,
                 new LocalTestSeedGuard(environment)).run(new DefaultApplicationArguments()))
                 .isInstanceOf(IllegalStateException.class);
         verify(jdbc, never()).update(anyString(), any(Object[].class));

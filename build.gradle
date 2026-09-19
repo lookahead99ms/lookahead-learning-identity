@@ -1,0 +1,71 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.1.1'
+}
+
+group = 'com.lookahead.learning'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Match the former Maven dependency-management versions rather than upgrading
+    // a managed library when a transitive dependency requests a newer version.
+    implementation enforcedPlatform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES)
+    implementation 'commons-logging:commons-logging'
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.security:spring-security-oauth2-authorization-server'
+    implementation 'org.springframework.security:spring-security-oauth2-jose'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+    implementation 'org.postgresql:postgresql'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+dependencyLocking {
+    lockAllConfigurations()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+    options.encoding = 'UTF-8'
+    options.compilerArgs += '-parameters'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    testLogging {
+        exceptionFormat = 'full'
+    }
+}
+
+springBoot {
+    mainClass = 'com.lookahead.identity.IdentityApplication'
+}
+
+tasks.named('bootJar') {
+    archiveFileName = 'lookahead-identity.jar'
+    // Dependency resolution order can differ between a refreshed lock and a
+    // fresh checkout. Keep the packaged classpath index stable in both cases.
+    classpath = files(sourceSets.main.output, configurations.runtimeClasspath.elements.map { locations ->
+        locations.collect { it.asFile }.sort { left, right -> left.name <=> right.name }
+    })
+}
+
+tasks.named('jar') {
+    enabled = false
+}
