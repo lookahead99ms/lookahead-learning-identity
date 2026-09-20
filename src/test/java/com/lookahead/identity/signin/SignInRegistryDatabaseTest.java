@@ -114,11 +114,15 @@ class SignInRegistryDatabaseTest {
     }
     @Test void failedReplacementRollsBackRevocationAndAdmitsNothing(){
         UUID owner=owner();var one=admit(first,owner,"one");var two=admit(first,owner,"two");var pending=admit(first,owner,"three");
-        jdbc.execute("ALTER TABLE logical_sign_ins ADD CONSTRAINT replacement_failure CHECK(binding_digest <> '"+SignInRegistry.digest("three")+"')");
+        jdbc.execute("CREATE FUNCTION reject_sign_in_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic replacement failure'; END; $$");
+        jdbc.execute("CREATE TRIGGER replacement_failure BEFORE INSERT ON logical_sign_ins FOR EACH ROW EXECUTE FUNCTION reject_sign_in_insert()");
         try {
             assertThatThrownBy(()->first.replace(pending.challengeToken(),one.signInId())).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
             assertThat(second.list(owner,0,one.signInId())).extracting(SignInRegistry.SignIn::id).containsExactlyInAnyOrder(one.signInId(),two.signInId());
-        } finally {jdbc.execute("ALTER TABLE logical_sign_ins DROP CONSTRAINT replacement_failure");}
+        } finally {
+            jdbc.execute("DROP TRIGGER replacement_failure ON logical_sign_ins");
+            jdbc.execute("DROP FUNCTION reject_sign_in_insert()");
+        }
         assertThat(first.replace(pending.challengeToken(),one.signInId()).signInId()).isNotNull();
     }
     @Test void separateChallengesForSameBindingHaveSingleAdmission(){
