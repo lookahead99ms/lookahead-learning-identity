@@ -159,3 +159,7 @@ transfer, production deployment, session replication or disaster recovery.
 Those remain required before cutover. Google federation, paid subscriptions,
 roles/admin tooling, password recovery and MFA are separate capabilities; this
 extraction does not claim to implement them.
+
+## Logical sign-in controls
+
+See [the sign-in API and configuration guide](docs/sign-in-api.md) and [OpenAPI source](docs/sign-in-openapi.json) for the two-sign-in limit, restricted replacement, revocation, migration and local verification.

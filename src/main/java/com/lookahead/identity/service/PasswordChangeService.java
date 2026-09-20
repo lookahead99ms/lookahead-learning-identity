@@ -45,6 +45,8 @@ public class PasswordChangeService {
             if(matches(request.newPassword(),state.hash())) return new AccountFailure(422,"PASSWORD_UNCHANGED","Choose a different password");
             jdbc.update("UPDATE accounts SET password_hash=?,credential_epoch=credential_epoch+1,password_failure_count=0,password_failure_window=NULL WHERE id=?",encoded,principal.accountId());
             jdbc.update("DELETE FROM oauth2_authorization WHERE principal_name=?",principal.accountId().toString());
+            jdbc.update("UPDATE logical_sign_ins SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE account_id=?",principal.accountId());
+            jdbc.update("UPDATE sign_in_challenges SET cancelled=true WHERE account_id=?",principal.accountId());
             return null;
         });
         // Throw outside the transaction so failed-verification counters are committed.

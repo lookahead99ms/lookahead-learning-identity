@@ -27,15 +27,21 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 @SpringBootTest(classes = RegistrationSecurityIntegrationTest.App.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {"spring.config.name=security-test", "app.accounts.registration-enabled=true", "app.deployment-environment=local"})
+        properties = {"spring.config.name=security-test", "app.accounts.registration-enabled=true", "app.deployment-environment=local", "server.servlet.session.cookie.secure=false"})
 @ActiveProfiles("accounts")
 class RegistrationSecurityIntegrationTest {
     @LocalServerPort int port;
     @Autowired ObjectMapper mapper;
     @Configuration
     @EnableAutoConfiguration(excludeName = {"org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration", "org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration"})
-    @Import({AccountSecurityConfig.class, AuthController.class, RegistrationController.class, RegistrationService.class, AccountUserDetailsService.class, AccountErrorHandler.class, LocalTestSeedGuard.class})
+    @Import({AccountSecurityConfig.class, AuthController.class, RegistrationController.class, RegistrationService.class, AccountUserDetailsService.class, AccountErrorHandler.class, LocalTestSeedGuard.class,com.lookahead.identity.signin.SignInSessionSupport.class})
     static class App {
+        @Bean com.lookahead.identity.signin.SignInRegistry signIns() {
+            var registry=mock(com.lookahead.identity.signin.SignInRegistry.class);
+            when(registry.admit(any(),anyLong(),anyString(),anyString())).thenAnswer(c->new com.lookahead.identity.signin.SignInRegistry.Admission(c.getArgument(0),c.getArgument(1),UUID.randomUUID(),null,null));
+            when(registry.current(any(),anyLong(),any(),anyBoolean())).thenAnswer(c->new com.lookahead.identity.signin.SignInRegistry.SignIn(c.getArgument(2),true,"","Browser",java.time.Instant.now(),java.time.Instant.now(),java.time.Instant.now()));
+            return registry;
+        }
         @Bean JdbcTemplate jdbc() { return mock(JdbcTemplate.class); }
         @Bean AccountRepository accounts() {
             var repo = mock(AccountRepository.class);

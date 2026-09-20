@@ -20,10 +20,11 @@ public final class IdentityDatabaseHealthIndicator implements HealthIndicator {
             WHERE pg_catalog.has_schema_privilege(current_user,oid,'CREATE'))
           AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class c
             JOIN pg_catalog.pg_roles r ON r.oid=c.relowner WHERE r.rolname=current_user)
-          AND EXISTS (SELECT 1 FROM public.flyway_schema_history WHERE version='1' AND success)
+          AND EXISTS (SELECT 1 FROM public.flyway_schema_history WHERE version='3' AND success)
           AND NOT EXISTS (
             SELECT 1 FROM unnest(ARRAY['public.accounts','public.account_profiles',
-              'public.oauth2_registered_client','public.oauth2_authorization','public.oauth2_authorization_consent']) AS t(name)
+              'public.oauth2_registered_client','public.oauth2_authorization','public.oauth2_authorization_consent',
+              'public.logical_sign_ins','public.sign_in_challenges']) AS t(name)
             CROSS JOIN unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE']) AS p(privilege)
             WHERE NOT pg_catalog.has_table_privilege(current_user,t.name,p.privilege))
         """;

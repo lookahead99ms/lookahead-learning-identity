@@ -25,8 +25,9 @@ import org.springframework.web.bind.annotation.*;
 public class RegistrationController {
     private final RegistrationService registration;
     private final AccountUserDetailsService users;
-    public RegistrationController(RegistrationService registration, AccountUserDetailsService users) {
-        this.registration = registration; this.users = users;
+    private final com.lookahead.identity.signin.SignInSessionSupport sessions;
+    public RegistrationController(RegistrationService registration, AccountUserDetailsService users, com.lookahead.identity.signin.SignInSessionSupport sessions) {
+        this.registration = registration; this.users = users; this.sessions = sessions;
     }
 
     @PostMapping("/api/v1/auth/register")
@@ -36,6 +37,9 @@ public class RegistrationController {
         if (current != null && current.isAuthenticated() && !(current instanceof AnonymousAuthenticationToken))
             throw new AccountFailure(409, "ALREADY_AUTHENTICATED", "Sign out before creating another account.");
         var principal = registration.register(payload);
+        var admission=sessions.admit(principal,request,response);
+        if(admission.signInId()==null)throw new AccountFailure(409,"SIGN_IN_LIMIT","Choose a sign-in to end.");
+        principal=principal.withSignIn(admission.signInId());
         var authentication = UsernamePasswordAuthenticationToken.authenticated(principal, null, principal.getAuthorities());
         new ChangeSessionIdAuthenticationStrategy().onAuthentication(authentication, request, response);
         new CsrfAuthenticationStrategy(new HttpSessionCsrfTokenRepository()).onAuthentication(authentication, request, response);

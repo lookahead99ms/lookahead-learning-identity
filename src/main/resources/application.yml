@@ -33,6 +33,12 @@ server:
 app:
   version: "0.0.1-SNAPSHOT"
   deployment-environment: ${LOOKAHEAD_ENVIRONMENT}
+  sign-ins:
+    idle-lifetime: ${LOOKAHEAD_SIGNIN_IDLE_LIFETIME:30m}
+    absolute-lifetime: ${LOOKAHEAD_SIGNIN_ABSOLUTE_LIFETIME:7d}
+    recent-authentication-lifetime: ${LOOKAHEAD_SIGNIN_RECENT_AUTH_LIFETIME:5m}
+    binding-cookie-name: ${LOOKAHEAD_SIGNIN_BINDING_COOKIE_NAME:LOOKAHEAD_SIGNIN_BINDING}
+    challenge-cookie-name: ${LOOKAHEAD_SIGNIN_CHALLENGE_COOKIE_NAME:LOOKAHEAD_SIGNIN_CHALLENGE}
   accounts:
     registration-enabled: ${LOOKAHEAD_REGISTRATION_ENABLED:false}
   local-test:
