@@ -46,9 +46,9 @@ public class OAuthClientConfiguration {
                         .accessTokenTimeToLive(properties.accessTokenTtl()).refreshTokenTimeToLive(properties.refreshTokenTtl()).reuseRefreshTokens(false).build()).build();
     }
     @Bean OAuth2AuthorizationService authorizations(JdbcTemplate jdbc, RegisteredClientRepository clients,
-            org.springframework.transaction.PlatformTransactionManager transactions) {
+            org.springframework.transaction.PlatformTransactionManager transactions, com.lookahead.identity.signin.SignInRegistry signIns) {
         return new TransactionalAuthorizationService(
-                new StablePrincipalAuthorizationService(new EpochAuthorizationService(new JdbcOAuth2AuthorizationService(jdbc,clients), jdbc, transactions)), transactions);
+                new StablePrincipalAuthorizationService(new EpochAuthorizationService(new JdbcOAuth2AuthorizationService(jdbc,clients), jdbc, transactions, signIns)), transactions);
     }
     @Bean OAuth2AuthorizationConsentService consents(JdbcTemplate jdbc, RegisteredClientRepository clients) {
         return new JdbcOAuth2AuthorizationConsentService(jdbc,clients);

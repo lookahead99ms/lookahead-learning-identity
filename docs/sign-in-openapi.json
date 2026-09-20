@@ -1,0 +1,589 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Identity logical sign-in API",
+    "version": "DLV-920-candidate"
+  },
+  "paths": {
+    "/api/v1/account/sign-ins": {
+      "get": {
+        "summary": "sign-ins",
+        "description": "Identity session required, or restricted challenge cookie for challenge routes. All responses no-store.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "limit": {
+                          "type": "integer",
+                          "const": 2
+                        },
+                        "entries": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Entry"
+                          }
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, label or challenge"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Invalid CSRF or recent authentication required"
+          },
+          "429": {
+            "description": "Challenge rate limit exceeded"
+          },
+          "503": {
+            "description": "Account storage unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/account/sign-ins/revoke": {
+      "post": {
+        "summary": "revoke",
+        "description": "Identity session required, or restricted challenge cookie for challenge routes. All responses no-store.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "reauthenticationRequired": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, label or challenge"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Invalid CSRF or recent authentication required"
+          },
+          "429": {
+            "description": "Challenge rate limit exceeded"
+          },
+          "503": {
+            "description": "Account storage unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "signInId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "signInId"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-TOKEN",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/account/sign-ins/revoke-others": {
+      "post": {
+        "summary": "revoke-others",
+        "description": "Identity session required, or restricted challenge cookie for challenge routes. All responses no-store.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "reauthenticationRequired": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, label or challenge"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Invalid CSRF or recent authentication required"
+          },
+          "429": {
+            "description": "Challenge rate limit exceeded"
+          },
+          "503": {
+            "description": "Account storage unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {},
+                "required": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-TOKEN",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/account/sign-ins/label": {
+      "post": {
+        "summary": "label",
+        "description": "Identity session required, or restricted challenge cookie for challenge routes. All responses no-store.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Entry"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, label or challenge"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Invalid CSRF or recent authentication required"
+          },
+          "429": {
+            "description": "Challenge rate limit exceeded"
+          },
+          "503": {
+            "description": "Account storage unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "maxLength": 80
+                  }
+                },
+                "required": [
+                  "label"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-TOKEN",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/sign-in-challenge": {
+      "get": {
+        "summary": "sign-in-challenge",
+        "description": "Identity session required, or restricted challenge cookie for challenge routes. All responses no-store.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "limit": {
+                          "type": "integer",
+                          "const": 2
+                        },
+                        "entries": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Entry"
+                          }
+                        },
+                        "expiresAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, label or challenge"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Invalid CSRF or recent authentication required"
+          },
+          "429": {
+            "description": "Challenge rate limit exceeded"
+          },
+          "503": {
+            "description": "Account storage unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/sign-in-challenge/replace": {
+      "post": {
+        "summary": "replace",
+        "description": "Identity session required, or restricted challenge cookie for challenge routes. All responses no-store.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AccountView"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, label or challenge"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Invalid CSRF or recent authentication required"
+          },
+          "429": {
+            "description": "Challenge rate limit exceeded"
+          },
+          "503": {
+            "description": "Account storage unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "signInId": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "signInId"
+                ]
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-TOKEN",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/sign-in-challenge/cancel": {
+      "post": {
+        "summary": "cancel",
+        "description": "Identity session required, or restricted challenge cookie for challenge routes. All responses no-store.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data",
+                    "timestamp"
+                  ],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "cancelled": {
+                          "type": "boolean",
+                          "const": true
+                        }
+                      }
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, label or challenge"
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Invalid CSRF or recent authentication required"
+          },
+          "429": {
+            "description": "Challenge rate limit exceeded"
+          },
+          "503": {
+            "description": "Account storage unavailable"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {},
+                "required": []
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-TOKEN",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Entry": {
+        "type": "object",
+        "required": [
+          "signInId",
+          "current",
+          "label",
+          "clientDescription",
+          "createdAt",
+          "lastActiveAt"
+        ],
+        "properties": {
+          "signInId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          },
+          "clientDescription": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastActiveAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AccountView": {
+        "type": "object",
+        "required": [
+          "accountId",
+          "username",
+          "displayName",
+          "topicGrants",
+          "contentGrants",
+          "authorPreview"
+        ],
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "username": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "topicGrants": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "contentGrants": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
+          },
+          "authorPreview": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

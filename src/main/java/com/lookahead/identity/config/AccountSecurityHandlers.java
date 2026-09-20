@@ -20,10 +20,12 @@ import java.util.Map;
 public class AccountSecurityHandlers {
     private final ObjectMapper mapper;
     private final AccountUserDetailsService users;
+    private final com.lookahead.identity.signin.SignInSessionSupport sessions;
 
-    public AccountSecurityHandlers(ObjectMapper mapper, AccountUserDetailsService users) {
+    public AccountSecurityHandlers(ObjectMapper mapper, AccountUserDetailsService users, com.lookahead.identity.signin.SignInSessionSupport sessions) {
         this.mapper = mapper;
         this.users = users;
+        this.sessions = sessions;
     }
 
     void authenticationRequired(HttpServletRequest request, HttpServletResponse response,
@@ -41,11 +43,16 @@ public class AccountSecurityHandlers {
     void loginSucceeded(HttpServletRequest request, HttpServletResponse response,
                         Authentication authentication) throws IOException {
         try {
-            write(response, 200, ApiResponse.success(users.accountView((AccountPrincipal) authentication.getPrincipal())));
+            var admission=sessions.admit((AccountPrincipal)authentication.getPrincipal(),request,response);
+            if(admission.signInId()==null) {
+                write(response,409,Map.of("status",409,"code","SIGN_IN_LIMIT","message","Choose a sign-in to end before continuing.","expiresAt",admission.expiresAt()));
+                return;
+            }
+            write(response,200,ApiResponse.success(users.accountView((AccountPrincipal)org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getPrincipal())));
         } catch (com.lookahead.identity.exception.AccountFailure stale) {
             org.springframework.security.core.context.SecurityContextHolder.clearContext();
             var session=request.getSession(false); if(session!=null)session.invalidate();
-            error(request,response,401,"AUTHENTICATION_REQUIRED","Sign in to continue");
+            error(request,response,stale.status(),stale.code(),stale.getMessage());
         } catch (org.springframework.dao.DataAccessException unavailable) {
             org.springframework.security.core.context.SecurityContextHolder.clearContext();
             var session=request.getSession(false); if(session!=null)session.invalidate();

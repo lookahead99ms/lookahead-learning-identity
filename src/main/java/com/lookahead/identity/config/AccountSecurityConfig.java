@@ -33,13 +33,13 @@ public class AccountSecurityConfig {
     @org.springframework.core.annotation.Order(3)
     SecurityFilterChain accountSecurity(HttpSecurity http, AccountUserDetailsService users,
                                         PasswordEncoder encoder, AccountSecurityHandlers handlers, AccountSecurityProperties properties, Environment environment,
-                                        LocalTestSeedGuard localTestGuard, com.lookahead.identity.repository.AccountRepository accounts) throws Exception {
+                                        LocalTestSeedGuard localTestGuard, com.lookahead.identity.repository.AccountRepository accounts, com.lookahead.identity.signin.SignInRegistry signIns) throws Exception {
         boolean localPasswordLogin = environment.acceptsProfiles(Profiles.of("local-test"))
                 && "local".equals(environment.getProperty("app.deployment-environment"))
                 && !environment.acceptsProfiles(Profiles.of("prod", "production"));
         boolean registrationEnabled = properties.registrationEnabled();
         boolean passwordLogin = localPasswordLogin || registrationEnabled;
-        http.addFilterAfter(new com.lookahead.identity.filter.CredentialEpochFilter(accounts), org.springframework.security.web.context.SecurityContextHolderFilter.class);
+        http.addFilterAfter(new com.lookahead.identity.filter.CredentialEpochFilter(accounts,signIns), org.springframework.security.web.context.SecurityContextHolderFilter.class);
         http.cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.csrfTokenRepository(new HttpSessionCsrfTokenRepository()))
                 .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()))
@@ -55,7 +55,10 @@ public class AccountSecurityConfig {
                                 "/api/v1/auth/options",
                                 "/actuator/health", "/actuator/health/**", "/actuator/info",
                                 "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.GET,"/api/v1/auth/sign-in-challenge").permitAll()
+                        .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/v1/auth/sign-in-challenge/replace","/api/v1/auth/sign-in-challenge/cancel").permitAll()
                         .requestMatchers("/api/v1/auth/logout").permitAll()
+                        .requestMatchers("/api/v1/account/sign-ins","/api/v1/account/sign-ins/revoke","/api/v1/account/sign-ins/revoke-others","/api/v1/account/sign-ins/label").authenticated()
                         .requestMatchers("/api/v1/auth/continue", "/api/v1/auth/me", "/api/v1/account/profile", "/api/v1/account/password").authenticated()
                         .anyRequest().denyAll();
                 })
@@ -63,6 +66,10 @@ public class AccountSecurityConfig {
                         .authenticationEntryPoint(handlers::authenticationRequired)
                         .accessDeniedHandler(handlers::accessDenied))
                 .logout(logout -> logout.logoutUrl("/api/v1/auth/logout")
+                        .addLogoutHandler((request,response,authentication)->{
+                            if(authentication!=null && authentication.getPrincipal() instanceof com.lookahead.identity.security.AccountPrincipal principal && principal.signInId()!=null)
+                                signIns.terminate(principal.accountId(),principal.credentialEpoch(),principal.signInId());
+                        })
                         .invalidateHttpSession(true).clearAuthentication(true)
                         .deleteCookies(environment.getProperty("server.servlet.session.cookie.name", "JSESSIONID"))
                         .logoutSuccessHandler((request, response, authentication) -> response.setStatus(204)));

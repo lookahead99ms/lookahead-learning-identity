@@ -1,6 +1,7 @@
 package com.lookahead.identity.account;
 
 import com.lookahead.identity.config.*;
+import com.lookahead.identity.signin.*;
 import com.lookahead.identity.controller.*;
 import com.lookahead.identity.dto.PasswordChangeRequest;
 import com.lookahead.identity.handler.AccountErrorHandler;
@@ -52,7 +53,7 @@ class CredentialEpochDatabaseTest {
     @Configuration
     @EnableAutoConfiguration(excludeName={"org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration","org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration"})
     @Import({AccountSecurityConfig.class,AuthController.class,PasswordChangeController.class,
-            AccountRepository.class,PasswordChangeService.class,AccountErrorHandler.class,LocalTestSeedGuard.class,AccountProfileService.class,AccountProfileController.class,OAuthServerConfiguration.class,OAuthClientConfiguration.class,OAuthKeyConfiguration.class,com.lookahead.identity.verification.TokenVerificationService.class})
+            AccountRepository.class,PasswordChangeService.class,AccountErrorHandler.class,LocalTestSeedGuard.class,AccountProfileService.class,AccountProfileController.class,SignInRegistry.class,SignInSessionSupport.class,SignInController.class,OAuthServerConfiguration.class,OAuthClientConfiguration.class,OAuthKeyConfiguration.class,com.lookahead.identity.verification.TokenVerificationService.class,com.lookahead.identity.verification.TokenVerificationController.class,com.lookahead.identity.verification.TokenVerificationSecurity.class})
     static class App {
         @Bean OAuthProperties oauthProperties() {return oauthProperties;}
         @Bean OAuthSettings oauthSettings() {return new OAuthSettings("https://example.test",CLIENT,SECRET,"https://example.test","https://example.test");}
@@ -70,18 +71,19 @@ class CredentialEpochDatabaseTest {
                 }
             };
         }
-        @Bean DataSource dataSource() {return new DriverManagerDataSource(url,"postgres","synthetic-epoch-test-only");}
+        @Bean DataSource dataSource() {return new DriverManagerDataSource(url,"postgres",System.getenv().getOrDefault("DLV920_DATABASE_PASSWORD","synthetic-epoch-test-only"));}
         @Bean JdbcTemplate jdbc(DataSource source) {return new JdbcTemplate(source);}
         @Bean PlatformTransactionManager transactionManager(DataSource source) {return new DataSourceTransactionManager(source);}
     }
     @BeforeAll void start() throws Exception {
         schema="epoch_"+UUID.randomUUID().toString().replace("-","");
-        var admin=new JdbcTemplate(new DriverManagerDataSource(System.getenv("DLV919_DATABASE_URL"),"postgres","synthetic-epoch-test-only"));
+        var admin=new JdbcTemplate(new DriverManagerDataSource(System.getenv("DLV919_DATABASE_URL"),"postgres",System.getenv().getOrDefault("DLV920_DATABASE_PASSWORD","synthetic-epoch-test-only")));
         admin.execute("CREATE SCHEMA "+schema);
         url=System.getenv("DLV919_DATABASE_URL")+"?currentSchema="+schema;
-        var source=new DriverManagerDataSource(url,"postgres","synthetic-epoch-test-only"); jdbc=new JdbcTemplate(source);
+        var source=new DriverManagerDataSource(url,"postgres",System.getenv().getOrDefault("DLV920_DATABASE_PASSWORD","synthetic-epoch-test-only")); jdbc=new JdbcTemplate(source);
         String sql=Files.readString(Path.of("src/main/resources/db/identity/V1__identity.sql")).split("REVOKE ALL")[0]
-                +Files.readString(Path.of("src/main/resources/db/identity/V2__credential_epoch.sql"));
+                +Files.readString(Path.of("src/main/resources/db/identity/V2__credential_epoch.sql"))
+                +Files.readString(Path.of("src/main/resources/db/identity/V3__logical_sign_ins.sql")).split("GRANT SELECT")[0];
         new ResourceDatabasePopulator(new ByteArrayResource(sql.getBytes(StandardCharsets.UTF_8))).execute(source);
         var generator=java.security.KeyPairGenerator.getInstance("RSA");generator.initialize(3072);var keys=generator.generateKeyPair();
         Path directory=Files.createTempDirectory(Path.of("build"),"epoch-test-keys-");
@@ -93,8 +95,9 @@ class CredentialEpochDatabaseTest {
     }
     ConfigurableApplicationContext server() {
         return new SpringApplicationBuilder(App.class).profiles("accounts","oauth-server").properties("spring.config.name=epoch-test",
+                "app.identity.verifier-secret=synthetic-verification-secret-test-only-920", "app.oauth.client-secret="+SECRET,
                 "server.port=0","app.accounts.registration-enabled=true","app.deployment-environment=local",
-                "spring.jackson.deserialization.fail-on-unknown-properties=false").run();
+                "spring.jackson.deserialization.fail-on-unknown-properties=false","server.servlet.session.cookie.secure=false").run();
     }
     @AfterAll void stop() {
         if(first!=null)first.close();if(second!=null)second.close();
@@ -194,11 +197,11 @@ class CredentialEpochDatabaseTest {
         UUID id=account();var clients=new JdbcRegisteredClientRepository(jdbc);
         var client=RegisteredClient.withId(UUID.randomUUID().toString()).clientId(UUID.randomUUID().toString()).clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC).authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE).redirectUri("https://example.test/callback").build();clients.save(client);
         var raw=new JdbcOAuth2AuthorizationService(jdbc,clients);
-        var guarded=new EpochAuthorizationService(raw,jdbc,first.getBean(PlatformTransactionManager.class));
+        var guarded=new EpochAuthorizationService(raw,jdbc,first.getBean(PlatformTransactionManager.class),first.getBean(SignInRegistry.class));
         var access=new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER,"synthetic-access-"+id,Instant.now(),Instant.now().plusSeconds(300));
         var refresh=new OAuth2RefreshToken("synthetic-refresh-"+id,Instant.now(),Instant.now().plusSeconds(300));
         var code=new OAuth2AuthorizationCode("synthetic-code-"+id,Instant.now(),Instant.now().plusSeconds(300));
-        var auth=OAuth2Authorization.withRegisteredClient(client).principalName(id.toString()).authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE).attribute(EpochAuthorizationService.EPOCH,"0").accessToken(access).refreshToken(refresh).token(code).build();
+        var auth=OAuth2Authorization.withRegisteredClient(client).principalName(id.toString()).authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE).attribute(EpochAuthorizationService.EPOCH,"0").attribute(EpochAuthorizationService.SIGN_IN,first.getBean(SignInRegistry.class).admit(id,0,SignInRegistry.digest("testbinding"+id),"Test browser").signInId().toString()).accessToken(access).refreshToken(refresh).token(code).build();
         guarded.save(auth);
         first.getBean(PasswordChangeService.class).change(principal(id),new PasswordChangeRequest(legacy,"another unique password","another unique password"));
         for(String token:List.of(access.getTokenValue(),refresh.getTokenValue(),code.getTokenValue()))assertThat(guarded.findByToken(token,null)).isNull();
@@ -218,9 +221,9 @@ class CredentialEpochDatabaseTest {
     }
     @Test void authorizationSaveWaitingOnRotationLockFailsAfterCommit() throws Exception {
         UUID id=account();var client=RegisteredClient.withId(UUID.randomUUID().toString()).clientId(UUID.randomUUID().toString()).authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE).redirectUri("https://example.test/callback").build();
-        var authorization=OAuth2Authorization.withRegisteredClient(client).principalName(id.toString()).authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE).attribute(EpochAuthorizationService.EPOCH,"0").build();
+        var authorization=OAuth2Authorization.withRegisteredClient(client).principalName(id.toString()).authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE).attribute(EpochAuthorizationService.EPOCH,"0").attribute(EpochAuthorizationService.SIGN_IN,first.getBean(SignInRegistry.class).admit(id,0,SignInRegistry.digest("testbinding"+id),"Test browser").signInId().toString()).build();
         var delegate=new InMemoryOAuth2AuthorizationService();
-        var guarded=new EpochAuthorizationService(delegate,jdbc,second.getBean(PlatformTransactionManager.class));
+        var guarded=new EpochAuthorizationService(delegate,jdbc,second.getBean(PlatformTransactionManager.class),second.getBean(SignInRegistry.class));
         var held=new CountDownLatch(1);var release=new CountDownLatch(1);var saveStarted=new CountDownLatch(1);var pool=Executors.newFixedThreadPool(2);
         try {
             var rotation=pool.submit(()->new org.springframework.transaction.support.TransactionTemplate(first.getBean(PlatformTransactionManager.class)).executeWithoutResult(status->{
@@ -254,4 +257,100 @@ class CredentialEpochDatabaseTest {
             assertThat(successes).isEqualTo(1);assertThat(jdbc.queryForObject("SELECT credential_epoch FROM accounts WHERE id=?",Long.class,id)).isEqualTo(1);
         }finally{pool.shutdownNow();}
     }
+    HttpResponse<String> attemptLogin(ConfigurableApplicationContext app,HttpClient browser,UUID id) throws Exception {
+        return request(app,browser,"POST","/api/v1/auth/login","username="+URLEncoder.encode(id+"@example.test",StandardCharsets.UTF_8)+"&password="+legacy,csrf(app,browser),"application/x-www-form-urlencoded");
+    }
+    String currentSignIn(ConfigurableApplicationContext app,HttpClient browser) throws Exception {
+        var response=request(app,browser,"GET","/api/v1/account/sign-ins",null,null,null);
+        assertThat(response.statusCode()).isEqualTo(200);
+        for(var entry:mapper.readTree(response.body()).path("data").path("entries"))if(entry.path("current").asBoolean())return entry.path("signInId").asText();
+        throw new AssertionError("No current sign-in");
+    }
+    @Test void thirdBrowserRestrictedChooserReplacesOneAndRecoversLostResponseAcrossInstances() throws Exception {
+        UUID owner=account();var a=browser();var b=browser();var c=browser();
+        login(first,a,owner,legacy);String original=currentSignIn(first,a);
+        login(first,a,owner,legacy);assertThat(currentSignIn(first,a)).isEqualTo(original);
+        login(second,b,owner,legacy);String retained=currentSignIn(second,b);
+        var limited=attemptLogin(first,c,owner);assertThat(limited.statusCode()).isEqualTo(409);assertThat(limited.body()).contains("SIGN_IN_LIMIT").doesNotContain("challengeToken","binding_digest");
+        assertThat(request(first,c,"GET","/api/v1/auth/me",null,null,null).statusCode()).isEqualTo(401);
+        var chooser=request(first,c,"GET","/api/v1/auth/sign-in-challenge",null,null,null);
+        assertThat(chooser.statusCode()).isEqualTo(200);assertThat(mapper.readTree(chooser.body()).path("data").path("entries").size()).isEqualTo(2);
+        String selection=mapper.writeValueAsString(Map.of("signInId",original));
+        assertThat(request(first,c,"POST","/api/v1/auth/sign-in-challenge/replace",selection,null,"application/json").statusCode()).isEqualTo(403);
+        assertThat(request(first,c,"POST","/api/v1/auth/sign-in-challenge/replace",selection,csrf(first,a),"application/json").statusCode()).isEqualTo(403);
+        assertThat(request(first,c,"POST","/api/v1/auth/sign-in-challenge/replace",selection,csrf(first,c),"application/json").statusCode()).isEqualTo(200);
+        String admitted=currentSignIn(first,c);assertThat(admitted).isNotEqualTo(original).isNotEqualTo(retained);
+        // Same proof and selection are retried on the other server, which has no first-server servlet context.
+        assertThat(request(second,c,"POST","/api/v1/auth/sign-in-challenge/replace",selection,csrf(second,c),"application/json").statusCode()).isEqualTo(200);
+        assertThat(currentSignIn(second,c)).isEqualTo(admitted);
+        assertThat(request(first,a,"GET","/api/v1/auth/me",null,null,null).statusCode()).isEqualTo(401);
+        assertThat(request(second,b,"GET","/api/v1/auth/me",null,null,null).statusCode()).isEqualTo(200);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM logical_sign_ins WHERE account_id=? AND revoked_at IS NULL",Integer.class,owner)).isEqualTo(2);
+    }
+    @Test void cancelAndForeignSelectionDoNotDisturbExistingSignIns() throws Exception {
+        UUID owner=account(),other=account();var a=browser();var b=browser();var c=browser();var foreign=browser();
+        login(first,a,owner,legacy);login(second,b,owner,legacy);login(second,foreign,other,legacy);
+        String foreignId=currentSignIn(second,foreign);
+        assertThat(attemptLogin(first,c,owner).statusCode()).isEqualTo(409);
+        assertThat(request(first,c,"POST","/api/v1/auth/sign-in-challenge/replace",mapper.writeValueAsString(Map.of("signInId",foreignId)),csrf(first,c),"application/json").statusCode()).isEqualTo(400);
+        assertThat(request(first,c,"POST","/api/v1/auth/sign-in-challenge/cancel","{}",csrf(first,c),"application/json").statusCode()).isEqualTo(200);
+        assertThat(request(first,c,"GET","/api/v1/auth/sign-in-challenge",null,null,null).statusCode()).isEqualTo(400);
+        assertThat(request(first,a,"GET","/api/v1/auth/me",null,null,null).statusCode()).isEqualTo(200);
+        assertThat(request(second,b,"GET","/api/v1/auth/me",null,null,null).statusCode()).isEqualTo(200);
+        assertThat(request(second,foreign,"GET","/api/v1/auth/me",null,null,null).statusCode()).isEqualTo(200);
+    }
+    boolean verifyHttp(ConfigurableApplicationContext app,String access) throws Exception {
+        int port=((WebServerApplicationContext)app).getWebServer().getPort();
+        var response=browser().send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/internal/v1/tokens/verify"))
+                .header("Authorization","Basic "+Base64.getEncoder().encodeToString("lookahead-domain-verifier:synthetic-verification-secret-test-only-920".getBytes(StandardCharsets.UTF_8)))
+                .header("Content-Type","application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString("token="+URLEncoder.encode(access,StandardCharsets.UTF_8))).build(),HttpResponse.BodyHandlers.ofString());
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.headers().firstValue("Cache-Control")).contains("no-store");
+        return mapper.readTree(response.body()).path("active").asBoolean();
+    }
+    @Test void oidcLogoutRevokesOnlyCurrentLogicalSignIn() throws Exception {
+        UUID owner=account();var exiting=browser();var retained=browser();login(first,exiting,owner,legacy);login(second,retained,owner,legacy);
+        String verifier="o".repeat(64);
+        var tokens=token(first,codeBody(authorize(first,exiting,verifier),verifier));
+        assertThat(tokens.statusCode()).isEqualTo(200);
+        var json=mapper.readTree(tokens.body());String access=json.path("access_token").asText();
+        assertThat(verifyHttp(second,access)).isTrue();
+        var logout=request(first,exiting,"GET","/connect/logout?id_token_hint="+URLEncoder.encode(json.path("id_token").asText(),StandardCharsets.UTF_8)+"&post_logout_redirect_uri="+URLEncoder.encode("https://example.test/sign-in",StandardCharsets.UTF_8),null,null,null);
+        assertThat(logout.statusCode()).isEqualTo(302);
+        assertThat(logout.headers().firstValue("location")).contains("https://example.test/sign-in");
+        assertThat(verifyHttp(second,access)).isFalse();
+        assertThat(request(first,exiting,"GET","/api/v1/auth/me",null,null,null).statusCode()).isEqualTo(401);
+        assertThat(request(second,retained,"GET","/api/v1/auth/me",null,null,null).statusCode()).isEqualTo(200);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM logical_sign_ins WHERE account_id=? AND revoked_at IS NULL",Integer.class,owner)).isEqualTo(1);
+    }
+    @Test void selectiveRevocationRejectsUnexpiredAccessRefreshCodeAndSilentAuthorization() throws Exception {
+        UUID owner=account();var revoked=browser();var retained=browser();login(first,revoked,owner,legacy);login(second,retained,owner,legacy);
+        String revokedId=currentSignIn(first,revoked);String verifier="s".repeat(64);
+        var oldTokens=token(second,codeBody(authorize(first,revoked,verifier),verifier));assertThat(oldTokens.statusCode()).isEqualTo(200);
+        var survivorTokens=token(first,codeBody(authorize(second,retained,verifier),verifier));assertThat(survivorTokens.statusCode()).isEqualTo(200);
+        String oldAccess=mapper.readTree(oldTokens.body()).path("access_token").asText();String oldRefresh=mapper.readTree(oldTokens.body()).path("refresh_token").asText();
+        String survivorAccess=mapper.readTree(survivorTokens.body()).path("access_token").asText();
+        String outstanding=authorize(first,revoked,verifier);
+        assertThat(first.getBean(org.springframework.security.oauth2.jwt.JwtDecoder.class).decode(oldAccess).getExpiresAt()).isAfter(Instant.now());
+        var result=request(second,retained,"POST","/api/v1/account/sign-ins/revoke",mapper.writeValueAsString(Map.of("signInId",revokedId)),csrf(second,retained),"application/json");
+        assertThat(result.statusCode()).isEqualTo(200);assertThat(mapper.readTree(result.body()).path("data").path("reauthenticationRequired").asBoolean()).isFalse();
+        assertThat(verifyHttp(first,oldAccess)).isFalse();
+        assertThat(verifyHttp(first,survivorAccess)).isTrue();
+        assertThat(token(second,"grant_type=refresh_token&refresh_token="+URLEncoder.encode(oldRefresh,StandardCharsets.UTF_8)).statusCode()).isEqualTo(400);
+        assertThat(token(first,codeBody(outstanding,verifier)).statusCode()).isEqualTo(400);
+        assertThat(request(first,revoked,"GET","/oauth2/authorize?response_type=code&client_id="+CLIENT,null,null,null).statusCode()).isEqualTo(401);
+        assertThat(request(second,retained,"GET","/api/v1/auth/me",null,null,null).statusCode()).isEqualTo(200);
+    }
+    @Test void recentAuthenticationRequiredForRevocationAndLogoutReleasesSlot() throws Exception {
+        UUID owner=account();var a=browser();var b=browser();login(first,a,owner,legacy);login(second,b,owner,legacy);
+        String current=currentSignIn(first,a);jdbc.update("UPDATE logical_sign_ins SET recent_auth_at=CURRENT_TIMESTAMP-INTERVAL '6 minutes' WHERE id=?",UUID.fromString(current));
+        var denied=request(first,a,"POST","/api/v1/account/sign-ins/revoke-others","{}",csrf(first,a),"application/json");
+        assertThat(denied.statusCode()).isEqualTo(403);assertThat(denied.body()).contains("RECENT_AUTHENTICATION_REQUIRED");
+        assertThat(request(first,a,"POST","/api/v1/auth/logout","",csrf(first,a),"application/x-www-form-urlencoded").statusCode()).isEqualTo(204);
+        login(first,browser(),owner,legacy);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM logical_sign_ins WHERE account_id=? AND revoked_at IS NULL",Integer.class,owner)).isEqualTo(2);
+        assertThat(request(second,b,"GET","/api/v1/auth/me",null,null,null).statusCode()).isEqualTo(200);
+    }
+
 }

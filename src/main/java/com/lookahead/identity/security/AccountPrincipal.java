@@ -17,12 +17,18 @@ public final class AccountPrincipal implements UserDetails, CredentialsContainer
     private final boolean enabled;
     private String password;
     private final long credentialEpoch;
+    private final UUID signInId;
 
     public AccountPrincipal(UUID accountId, String username, String displayName, String password, boolean enabled) {
         this(accountId, username, displayName, password, enabled, 0);
     }
 
     public AccountPrincipal(UUID accountId, String username, String displayName, String password, boolean enabled, long credentialEpoch) {
+        this(accountId, username, displayName, password, enabled, credentialEpoch, null);
+    }
+
+    public AccountPrincipal(UUID accountId, String username, String displayName, String password, boolean enabled, long credentialEpoch, UUID signInId) {
+        this.signInId = signInId;
         this.credentialEpoch = credentialEpoch;
         this.accountId = accountId;
         this.username = username;
@@ -31,6 +37,10 @@ public final class AccountPrincipal implements UserDetails, CredentialsContainer
         this.enabled = enabled;
     }
 
+    public UUID signInId() { return signInId; }
+    public AccountPrincipal withSignIn(UUID id) {
+        return new AccountPrincipal(accountId, username, displayName, null, enabled, credentialEpoch, id);
+    }
     public long credentialEpoch() { return credentialEpoch; }
     public UUID accountId() { return accountId; }
     public String displayName() { return displayName; }
