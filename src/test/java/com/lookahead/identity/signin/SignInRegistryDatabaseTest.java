@@ -37,6 +37,7 @@ class SignInRegistryDatabaseTest {
     }
     @BeforeEach void instances(){clock=new MutableClock();first=service();second=service();}
     SignInRegistry service(){return new SignInRegistry(jdbc,new DataSourceTransactionManager(source),SignInProperties.defaults(),clock);}
+    SignInRegistry unlimited(){return new SignInRegistry(jdbc,new DataSourceTransactionManager(source),new SignInProperties(Duration.ofMinutes(30),Duration.ofDays(7),Duration.ofMinutes(5),0),clock);}
     @AfterAll void cleanup(){if(admin!=null&&schema!=null)admin.execute("DROP SCHEMA "+schema+" CASCADE");}
     UUID owner(){UUID id=UUID.randomUUID();jdbc.update("INSERT INTO accounts(id,username,display_name,password_hash) VALUES(?,?,?,?)",id,id+"@example.test","Synthetic","unused");return id;}
     SignInRegistry.Admission admit(SignInRegistry registry,UUID owner,String binding){return registry.admit(owner,0,SignInRegistry.digest(binding),"Browser");}
@@ -48,6 +49,11 @@ class SignInRegistryDatabaseTest {
         first.cancel(challenge.challengeToken());fails(()->second.replace(challenge.challengeToken(),one.signInId()),"SIGN_IN_CHALLENGE_INVALID");
         second.cancel(challenge.challengeToken());
         assertThat(second.list(owner,0,one.signInId())).hasSize(2);
+    }
+    @Test void localUnlimitedPolicyAdmitsMoreThanTwoIndependentBindings(){
+        UUID owner=owner();var local=unlimited();UUID current=null;
+        for(int index=0;index<6;index++){var admitted=admit(local,owner,"local-"+index);assertThat(admitted.signInId()).isNotNull();if(current==null)current=admitted.signInId();}
+        assertThat(local.list(owner,0,current)).hasSize(6);
     }
     @Test void restartAndLostAdmissionResponseReuseBindingWithoutNewSlot(){
         UUID owner=owner();var one=admit(first,owner,"one");clock.advance(Duration.ofMinutes(1));
@@ -117,7 +123,7 @@ class SignInRegistryDatabaseTest {
         jdbc.execute("CREATE FUNCTION reject_sign_in_insert() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic replacement failure'; END; $$");
         jdbc.execute("CREATE TRIGGER replacement_failure BEFORE INSERT ON logical_sign_ins FOR EACH ROW EXECUTE FUNCTION reject_sign_in_insert()");
         try {
-            assertThatThrownBy(()->first.replace(pending.challengeToken(),one.signInId())).isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+            assertThatThrownBy(()->first.replace(pending.challengeToken(),one.signInId())).isInstanceOf(org.springframework.dao.DataAccessException.class);
             assertThat(second.list(owner,0,one.signInId())).extracting(SignInRegistry.SignIn::id).containsExactlyInAnyOrder(one.signInId(),two.signInId());
         } finally {
             jdbc.execute("DROP TRIGGER replacement_failure ON logical_sign_ins");

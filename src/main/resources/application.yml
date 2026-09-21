@@ -34,6 +34,7 @@ app:
   version: "0.0.1-SNAPSHOT"
   deployment-environment: ${LOOKAHEAD_ENVIRONMENT}
   sign-ins:
+    maximum-active-sessions: ${LOOKAHEAD_MAX_ACTIVE_SIGN_INS:2}
     idle-lifetime: ${LOOKAHEAD_SIGNIN_IDLE_LIFETIME:30m}
     absolute-lifetime: ${LOOKAHEAD_SIGNIN_ABSOLUTE_LIFETIME:7d}
     recent-authentication-lifetime: ${LOOKAHEAD_SIGNIN_RECENT_AUTH_LIFETIME:5m}

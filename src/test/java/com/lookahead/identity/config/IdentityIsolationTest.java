@@ -14,7 +14,8 @@ class IdentityIsolationTest {
         assertThat(credentials.toString()).isEqualTo("AccountCredentials[redacted]");
     }
     private MockEnvironment environment() {
-        var environment = new MockEnvironment().withProperty("app.deployment-environment", "local");
+        var environment = new MockEnvironment().withProperty("app.deployment-environment", "local")
+                .withProperty("app.sign-ins.maximum-active-sessions", "0");
         environment.setActiveProfiles("accounts", "oauth-server");
         return environment;
     }

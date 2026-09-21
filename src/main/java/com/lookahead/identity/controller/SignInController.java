@@ -18,15 +18,16 @@ public class SignInController {
     private final SignInRegistry registry;
     private final SignInSessionSupport sessions;
     private final AccountUserDetailsService users;
-    public SignInController(SignInRegistry registry,SignInSessionSupport sessions,AccountUserDetailsService users) {
-        this.registry=registry;this.sessions=sessions;this.users=users;
+    private final SignInProperties properties;
+    public SignInController(SignInRegistry registry,SignInSessionSupport sessions,AccountUserDetailsService users,SignInProperties properties) {
+        this.registry=registry;this.sessions=sessions;this.users=users;this.properties=properties;
     }
     public record Entry(UUID signInId,boolean current,String label,String clientDescription,Instant createdAt,Instant lastActiveAt) {}
-    public record Inventory(int limit,List<Entry> entries) {}
+    public record Inventory(Integer limit,List<Entry> entries) {}
     public record Challenge(int limit,List<Entry> entries,Instant expiresAt) {}
     @GetMapping("/api/v1/account/sign-ins")
     public ApiResponse<Inventory> inventory(@AuthenticationPrincipal AccountPrincipal principal,HttpServletResponse response) {
-        noStore(response);require(principal);return ApiResponse.success(new Inventory(2,entries(registry.list(principal.accountId(),principal.credentialEpoch(),principal.signInId()))));
+        noStore(response);require(principal);return ApiResponse.success(new Inventory(properties.reportedLimit(),entries(registry.list(principal.accountId(),principal.credentialEpoch(),principal.signInId()))));
     }
     @PostMapping("/api/v1/account/sign-ins/revoke")
     public ApiResponse<Map<String,Boolean>> revoke(@AuthenticationPrincipal AccountPrincipal principal,@RequestBody Map<String,Object> body,HttpServletRequest request,HttpServletResponse response) {
@@ -49,7 +50,7 @@ public class SignInController {
     @GetMapping("/api/v1/auth/sign-in-challenge")
     public ApiResponse<Challenge> challenge(HttpServletRequest request,HttpServletResponse response) {
         noStore(response);String token=challengeToken(request);
-        return ApiResponse.success(new Challenge(2,entries(registry.challengeInventory(token)),registry.challengeExpiresAt(token)));
+        return ApiResponse.success(new Challenge(properties.maximumActiveSessions(),entries(registry.challengeInventory(token)),registry.challengeExpiresAt(token)));
     }
     @PostMapping("/api/v1/auth/sign-in-challenge/replace")
     public ApiResponse<?> replace(@RequestBody Map<String,Object> body,HttpServletRequest request,HttpServletResponse response) {

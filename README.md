@@ -91,6 +91,7 @@ in this application.
 | `app.identity.verifier-secret` / `LOOKAHEAD_IDENTITY_VERIFIER_SECRET` | Separate Learning Domain API verification credential, at least 32 characters |
 | `LOOKAHEAD_REGISTRATION_ENABLED` | Explicitly enable registration/password account login |
 | `server.servlet.session.cookie.name` / `LOOKAHEAD_IDENTITY_COOKIE_NAME` | Defaults to `LOOKAHEAD_SESSION`; configure a unique candidate cookie and the same name in Gateway |
+| `LOOKAHEAD_MAX_ACTIVE_SIGN_INS` | Local requires `0` (unlimited); DEV and PROD require `2` |
 
 Database URLs must be explicit single-host PostgreSQL URLs. Only `sslmode` and
 an absolute `sslrootcert` path are accepted as URL parameters; credentials,
@@ -162,4 +163,4 @@ extraction does not claim to implement them.
 
 ## Logical sign-in controls
 
-See [the sign-in API and configuration guide](docs/sign-in-api.md) and [OpenAPI source](docs/sign-in-openapi.json) for the two-sign-in limit, restricted replacement, revocation, migration and local verification.
+See [the sign-in API and configuration guide](docs/sign-in-api.md) and [OpenAPI source](docs/sign-in-openapi.json) for unlimited Local development, the DEV/PROD two-sign-in limit, restricted replacement, revocation, migration and verification.

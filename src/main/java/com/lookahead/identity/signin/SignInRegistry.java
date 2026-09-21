@@ -45,7 +45,8 @@ public class SignInRegistry {
                 UUID id=existing.getFirst();jdbc.update("UPDATE logical_sign_ins SET recent_auth_at=?,last_active_at=? WHERE id=?",ts(now),ts(now),id);
                 return admission(owner,epoch,id);
             }
-            if(activeCount(owner)<2)return admission(owner,epoch,insert(owner,epoch,bindingDigest,client,now));
+            if(properties.unlimited() || activeCount(owner)<properties.maximumActiveSessions())
+                return admission(owner,epoch,insert(owner,epoch,bindingDigest,client,now));
             jdbc.update("DELETE FROM sign_in_challenges WHERE account_id=? AND created_at<?",owner,ts(now.minus(Duration.ofMinutes(15))));
             if(jdbc.queryForObject("SELECT count(*) FROM sign_in_challenges WHERE account_id=?",Integer.class,owner)>=5)
                 throw new AccountFailure(429,"SIGN_IN_RATE_LIMITED","Try signing in later.");
@@ -90,7 +91,7 @@ public class SignInRegistry {
                 // Expired/revoked selections remain owner-bound and safe to retry while a slot is free.
                 if(!Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM logical_sign_ins WHERE id=? AND account_id=?)",Boolean.class,selectedId,fresh.owner)))throw invalid();
                 revokeRow(fresh.owner,selectedId,now);
-                if(activeCount(fresh.owner)>=2)throw invalid();
+                if(!properties.unlimited() && activeCount(fresh.owner)>=properties.maximumActiveSessions())throw invalid();
                 admitted=insert(fresh.owner,fresh.epoch,fresh.binding,fresh.description,now);
             }
             jdbc.update("UPDATE sign_in_challenges SET selected_id=?,admitted_id=? WHERE token_digest=?",selectedId,admitted,digest(token));
