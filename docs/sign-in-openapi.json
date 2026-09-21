@@ -25,8 +25,15 @@
                       "type": "object",
                       "properties": {
                         "limit": {
-                          "type": "integer",
-                          "const": 2
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "enum": [
+                            2,
+                            null
+                          ],
+                          "description": "No admission cap in Local; DEV and PROD return 2."
                         },
                         "entries": {
                           "type": "array",

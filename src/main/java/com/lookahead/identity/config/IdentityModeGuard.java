@@ -29,6 +29,10 @@ public final class IdentityModeGuard {
         if (!"local".equals(deployment)
                 && !environment.getProperty("server.servlet.session.cookie.secure", Boolean.class, true))
             throw new IllegalStateException("Identity requires secure cookies outside local development");
+        int maximumActiveSessions = environment.getProperty("app.sign-ins.maximum-active-sessions", Integer.class, 2);
+        if (("local".equals(deployment) && maximumActiveSessions != 0)
+                || (!"local".equals(deployment) && maximumActiveSessions != 2))
+            throw new IllegalStateException("Local sign-ins must be unlimited; DEV and PROD must allow exactly two");
         if (!environment.getProperty("server.servlet.session.cookie.name", "LOOKAHEAD_SESSION")
                 .matches("[A-Z][A-Z0-9_]{2,63}"))
             throw new IllegalStateException("Identity cookie name must be 3 to 64 uppercase letters, digits or underscores");

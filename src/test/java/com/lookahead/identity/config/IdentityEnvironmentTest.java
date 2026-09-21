@@ -24,6 +24,8 @@ class IdentityEnvironmentTest {
                 assertThat(environment.getProperty("server.address")).isEqualTo("127.0.0.1");
                 assertThat(environment.getProperty("server.forward-headers-strategy")).isEqualTo("none");
                 assertThat(environment.getProperty("server.servlet.session.cookie.secure", Boolean.class)).isEqualTo(!"local".equals(mode));
+                assertThat(environment.getProperty("app.sign-ins.maximum-active-sessions", Integer.class))
+                        .isEqualTo("local".equals(mode) ? 0 : 2);
             });
         }
     }
@@ -37,5 +39,11 @@ class IdentityEnvironmentTest {
         configuration("local", "").run(context -> assertThat(context).hasFailed());
         configuration("dev", "development").run(context -> assertThat(context).hasFailed());
         configuration("prod", "production").run(context -> assertThat(context).hasFailed());
+        configuration("local", "local").withPropertyValues("LOOKAHEAD_MAX_ACTIVE_SIGN_INS=2")
+                .run(context -> assertThat(context).hasFailed());
+        configuration("dev", "dev").withPropertyValues("LOOKAHEAD_MAX_ACTIVE_SIGN_INS=0")
+                .run(context -> assertThat(context).hasFailed());
+        configuration("prod", "prod").withPropertyValues("LOOKAHEAD_MAX_ACTIVE_SIGN_INS=0")
+                .run(context -> assertThat(context).hasFailed());
     }
 }

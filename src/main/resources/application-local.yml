@@ -3,3 +3,6 @@ server:
     session:
       cookie:
         secure: false
+app:
+  sign-ins:
+    maximum-active-sessions: ${LOOKAHEAD_MAX_ACTIVE_SIGN_INS:0}

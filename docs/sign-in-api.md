@@ -1,6 +1,6 @@
 # Logical sign-in controls (DLV-920)
 
-Identity owns a PostgreSQL registry of logical sign-ins. A browser's Identity session, BFF session and OAuth authorizations share one registry entry; this is not hardware/device identification. At most two entries are active per account. Fresh credentials reuse the same valid browser binding; the binding cookie alone never authenticates.
+Identity owns a PostgreSQL registry of logical sign-ins. A browser's Identity session, BFF session and OAuth authorizations share one registry entry; this is not hardware/device identification. DEV and PROD permit at most two active entries per account. Local development has no admission cap so an author can use several browsers, profiles and physical devices while testing. Fresh credentials reuse the same valid browser binding; the binding cookie alone never authenticates.
 
 A third valid login returns flat HTTP 409 `SIGN_IN_LIMIT` with `expiresAt` and a restricted HttpOnly challenge cookie. It does not create an authenticated session. Fetch the challenge inventory, then explicitly replace one entry or cancel. Replacement is transactional and retrying the same proof/choice is idempotent for five minutes. After success, refresh Identity CSRF and continue the normal BFF authorization-code/PKCE flow. Cancel preserves the existing entries.
 
@@ -14,13 +14,14 @@ Run the existing migration entry point with the migration database role before s
 
 | Variable | Default | Supported range / meaning |
 | --- | --- | --- |
+| `LOOKAHEAD_MAX_ACTIVE_SIGN_INS` | Local `0`; DEV/PROD `2` | `0` means unlimited and is valid only in Local; DEV and PROD require exactly `2` |
 | `LOOKAHEAD_SIGNIN_IDLE_LIFETIME` | `30m` | 1 minute–24 hours; activity renews idle time |
 | `LOOKAHEAD_SIGNIN_ABSOLUTE_LIFETIME` | `7d` | 5 minutes–30 days; idle must not exceed absolute |
 | `LOOKAHEAD_SIGNIN_RECENT_AUTH_LIFETIME` | `5m` | 30 seconds–15 minutes |
 | `LOOKAHEAD_SIGNIN_BINDING_COOKIE_NAME` | `LOOKAHEAD_SIGNIN_BINDING` | Must match Gateway; distinct per deployment |
 | `LOOKAHEAD_SIGNIN_CHALLENGE_COOKIE_NAME` | `LOOKAHEAD_SIGNIN_CHALLENGE` | Must match Gateway; distinct from session/binding |
 
-Cookies are HttpOnly, SameSite=Lax, path `/`; secure follows the Identity session-cookie setting. Disable Secure only for isolated loopback HTTP development. Challenge lifetime is five minutes; at most five challenges per account per rolling fifteen minutes. Capacity is fixed at two. Retained revoked-record history currently has no automated retention job. Servlet sessions remain instance-local; durable binding allows fresh credential authentication after restart without consuming another slot. This does not establish seamless session failover.
+Cookies are HttpOnly, SameSite=Lax, path `/`; secure follows the Identity session-cookie setting. Disable Secure only for isolated loopback HTTP development. Challenge lifetime is five minutes; at most five challenges per account per rolling fifteen minutes. The replacement challenge exists only for the DEV/PROD two-sign-in policy. Local inventory returns `limit: null` and never creates a capacity challenge. Retained revoked-record history currently has no automated retention job. Servlet sessions remain instance-local; durable binding allows fresh credential authentication after restart without consuming another slot. This does not establish seamless session failover.
 
 ## Local verification and deployment boundary
 
