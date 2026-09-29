@@ -1,3 +1,10 @@
+// The Boot build plugin also carries Jackson; keep its classpath on the patched BOM.
+buildscript {
+    dependencies {
+        classpath enforcedPlatform('tools.jackson:jackson-bom:3.1.6')
+    }
+}
+
 plugins {
     id 'java'
     id 'org.springframework.boot' version '4.1.1'
@@ -20,6 +27,8 @@ dependencies {
     // Match the former Maven dependency-management versions rather than upgrading
     // a managed library when a transitive dependency requests a newer version.
     implementation enforcedPlatform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES)
+    // DLV-916: Boot 4.1.1 manages vulnerable Jackson 3.1.5; remove with a fixed Boot patch.
+    implementation enforcedPlatform('tools.jackson:jackson-bom:3.1.6')
     implementation 'commons-logging:commons-logging'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     implementation 'org.springframework.boot:spring-boot-starter-security'

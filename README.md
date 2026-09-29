@@ -15,10 +15,13 @@ Install a Java 21 JDK, then run from this repository:
 ```
 
 The committed wrapper downloads Gradle 9.6.1 and verifies its official SHA-256.
-Spring Boot 4.1.1 provides dependency versions, and `gradle.lockfile` pins the
-resolved dependencies. Only public Gradle plugin and Maven Central repositories
-are used. No sibling checkout, Toolkit JAR, private artifact registry or
-pre-populated Maven cache is required. Windows users can run `gradlew.bat`.
+Spring Boot 4.1.1 provides the dependency baseline, with a temporary Jackson
+patch BOM for both the project and build-plugin classpaths. `gradle.lockfile`
+pins the resolved project dependencies; see [Security CI](docs/security-ci.md)
+for the override and removal condition. Only public Gradle plugin and Maven
+Central repositories are used. No sibling checkout, Toolkit JAR, private artifact
+registry or pre-populated Maven cache is required. Windows users can run
+`gradlew.bat`.
 
 The executable is `build/libs/lookahead-identity.jar`, with main class
 `com.lookahead.identity.IdentityApplication`. Test results are under
