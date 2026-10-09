@@ -239,3 +239,8 @@ package scans and the isolated three-application Local authentication contract
 with fresh synthetic PostgreSQL databases. All applications ran as 10001:10001
 with a read-only root filesystem, capped temporary storage and healthy Java
 readiness probes. This does not certify Cognito or RDS connectivity in AWS.
+
+PR and main security gates require full-repository CodeQL analysis. The pinned
+action disables diff-informed and overlay analysis; reports marked incremental
+are rejected. A changed-lines-only scan cannot certify whole-code security or
+justify retiring an unexercised source-bound exception.
