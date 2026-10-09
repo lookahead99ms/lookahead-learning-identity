@@ -171,6 +171,9 @@ class SecurityGateTests(unittest.TestCase):
     def test_both_base_stages_must_be_pinned(self):
         valid='FROM eclipse-temurin:21-jdk@sha256:'+64*'a'+' AS build\nFROM eclipse-temurin:21-jre@sha256:'+64*'b'+' AS runtime'
         self.assertEqual(2,len(checks.base_images(valid)))
+        self.assertEqual(2,len(checks.base_images(valid.replace("21-jdk@", "21-jdk-noble@").replace("21-jre@", "21-jre-noble@"))))
+        for bad in [valid.replace("21-jdk@", "21-jdk-unknown@"), "\n".join(reversed(valid.splitlines()))]:
+            with self.assertRaises(ValueError):checks.base_images(bad)
         for bad in ['FROM eclipse-temurin:21-jre', valid.splitlines()[0], valid.replace('21-jdk@sha256:'+64*'a','21-jdk')]:
             with self.assertRaises(ValueError):checks.base_images(bad)
 
