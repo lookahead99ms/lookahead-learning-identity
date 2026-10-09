@@ -34,6 +34,14 @@ timestamps, IDs, grants and credential exclusion. Cross-service verification is
 orchestrated separately; passing these tests is not proof of a complete OAuth
 journey.
 
+## Required release coverage
+
+`./gradlew clean check` runs JaCoCo 0.8.15 and requires at least **85% production-code line coverage**, with no main-source exclusions. XML/HTML/CSV reports are under `build/reports/jacoco/test/`. Branch coverage is reported separately. The ordinary standalone `test bootJar` command remains useful for unit development; it does not certify the release coverage gate.
+
+The coverage run needs the disposable PostgreSQL fixtures: set `DLV919_DATABASE_URL` and `DLV920_DATABASE_URL` to the test database JDBC URL, and `DLV920_DATABASE_PASSWORD` to its synthetic password. Infra owns `scripts/session_registry_test_database.py` for local fixture lifecycle. Tests create and remove isolated schemas; never point them at application data. CI supplies a digest-pinned disposable PostgreSQL service and runs `clean check bootJar`. Without database fixtures the optional integration tests skip and the full coverage gate remains below the floor.
+
+Infra `tools/security/coverage_gate.py` additionally checks complete source inventory, current inputs and fresh reports for the four required applications (Web, Gateway, Domain and Identity) before DEV or PROD deployment. Infra tooling coverage is an optional measurement. A successful unit-only run or an old report cannot satisfy that release gate. Coverage evidence stays local/CI-private.
+
 ## Run and container build
 
 Identity is independently buildable, but real authentication requires its
@@ -163,4 +171,32 @@ extraction does not claim to implement them.
 
 ## Logical sign-in controls
 
-See [the sign-in API and configuration guide](docs/sign-in-api.md) and [OpenAPI source](docs/sign-in-openapi.json) for unlimited Local development, the DEV/PROD two-sign-in limit, restricted replacement, revocation, migration and verification.
+See [the Local sign-in API and configuration guide](docs/sign-in-api.md) and
+[OpenAPI source](docs/sign-in-openapi.json) for this service's retained Local
+behavior. Historical DEV/PROD policy options remain in the implementation and
+its tests, but this service is no longer selected by the cloud deployment target.
+
+## Local Identity and the cloud provider split
+
+Local continues to run this Spring Identity service with its own database.
+DEV/PROD now select Cognito explicitly in Gateway and Domain. Gateway keeps
+browser sessions, tokens and CSRF; Domain owns durable two-sign-in enforcement,
+revocation, stable issuer/subject-to-account mapping, admission and authorization.
+There is one Domain RDS instance per cloud environment and no cloud Identity
+service or Identity database in the maintained infrastructure candidate.
+
+The old `deployment/service.yaml` is preserved as a historical, inactive contract;
+Infra no longer loads it into cloud service plans. It is not an instruction to
+provision this service or its former secrets. The two shared ECS roles are reused
+by the three current cloud applications, with separate role resources for DEV and
+PROD. Local Docker configuration and stored data are preserved.
+
+The cloud implementation has controlled-provider and isolated PostgreSQL evidence;
+live Cognito/RDS/ECS verification, private service TLS and release-security gates
+remain open. See the active Gateway and Domain READMEs and Infra deployment
+runbooks for current contracts. No AWS resource, image or repository publication
+is authorized by these documents.
+
+The container readiness probe is production Java source at `src/main/java/com/lookahead/identity/health/ContainerHealthcheck.java`, so the ordinary JaCoCo report includes it. Tests use loopback HTTP fixtures to cover healthy and failed responses, malformed bodies, redirects, unavailable endpoints, timeouts and interruption. The container still probes only `127.0.0.1:8080/actuator/health/readiness`, with a two-second connection limit and three-second request limit. The process-exit wrapper remains in the measured source inventory.
+
+Docker resolves the checksum-pinned Gradle wrapper in a source-independent layer before copying build declarations and application sources. This reuses the wrapper download when source files change; dependency versions and the `clean test bootJar` build remain unchanged.
