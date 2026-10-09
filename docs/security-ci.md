@@ -22,7 +22,7 @@ The installer verifies pinned archive checksums. Supported tool hosts are Linux 
 
 ## Gate and reporting policy
 
-HIGH/CRITICAL dependency or configuration findings, unknown severity, any secret finding, scanner errors, or missing required package/configuration coverage fail the check. CodeQL security severity 7–10 fails; warning/error findings without severity also fail. Lower severity findings stay in local reports. Existing application test failures remain blocking. No automatic suppression or auto-merge is configured. Scanner environment overrides, repository ignore files and inline Gitleaks allow markers cannot disable these scans. A reviewed CodeQL false positive may use only the repository's explicit SAST exception contract: exact rule and repository-relative file, an unexpired review date, an owning ticket and rationale, and the SHA-256 digest of the reviewed source. Source drift, expiry, duplicate records, unmatched findings, and stale unused records all fail closed. A synthetic fixture already present in immutable fetched history may be recorded only by exact rule, file, line and commit with rationale; every other finding still fails, and a stale historical record also fails.
+HIGH/CRITICAL dependency or configuration findings, unknown severity, any secret finding, scanner errors, or missing required package/configuration coverage fail the check. Every CodeQL run must declare a successful invocation; absent or failed invocations and warning/error execution or configuration notifications fail closed. CodeQL security severity 7–10 fails; warning/error findings without severity also fail. Lower severity findings stay in local reports. Existing application test failures remain blocking. No automatic suppression or auto-merge is configured. Scanner environment overrides, repository ignore files and inline Gitleaks allow markers cannot disable these scans. A reviewed CodeQL false positive may use only the repository's explicit SAST exception contract: exact rule and repository-relative file, an unexpired review date, an owning ticket and rationale, and the SHA-256 digest of the reviewed source. Source drift, expiry, duplicate records, unmatched findings, and stale unused records all fail closed. A synthetic fixture already present in immutable fetched history may be recorded only by exact rule, file, line and commit with rationale; every other finding still fails, and a stale historical record also fails.
 
 Reports and SBOMs are written under ignored `.codex-scratch/security/`. Raw source/secret reports are not uploaded by this workflow; CodeQL database and SARIF uploads are disabled. Secret matches are redacted in history output and omitted from summary logs. GitHub job logs and ordinary build output still follow repository visibility. Do not put actual credentials into test fixtures.
 
@@ -39,3 +39,21 @@ Dependabot proposes weekly Friday 11 AM America/New_York updates for the native 
 On 2026-09-19 Maven Central lists Boot 4.1.1 as the latest stable 4.1 release; its BOM manages Tomcat 11.0.24. This application retains Boot 4.1.1 and overrides embedded Tomcat to 11.0.25, the Apache-published fixed release. Gradle uses a group-scoped resolution rule; Maven uses the Boot parent `tomcat.version` property. Remove the override when a compatible stable Boot patch manages 11.0.25 or newer, then repeat dependency, security, contract and image checks. Do not switch to a milestone release solely to remove this override.
 
 Sources: [Boot Maven metadata](https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-dependencies/maven-metadata.xml), [Boot 4.1.1 BOM](https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-dependencies/4.1.1/spring-boot-dependencies-4.1.1.pom), [Apache fixes](https://tomcat.apache.org/security-11.html).
+
+## October 2026 dependency patches (DLV-918)
+
+The resolved runtime, test and Gradle plugin classpaths now select Jackson 3.1.7.
+The buildscript classpath separately selects Commons Lang 3.18.0; application
+dependency rules do not apply to that classpath. Boot stays at 4.1.1 and the
+Tomcat override stays at 11.0.25. These temporary patch rules can be removed only
+after a compatible Boot update resolves fixed versions in every configuration.
+
+The Infra resolved inventory includes all resolvable project/buildscript
+configurations, metadata-only BOM components, and artifact hashes. OSV results
+cover public package coordinates, while application tests and exact-image
+reconciliation provide separate compatibility and packaging evidence. They do
+not establish runtime exploitability or live cloud security.
+
+References: [Jackson core advisory](https://github.com/FasterXML/jackson-core/security/advisories/GHSA-7hhh-6rmp-j9qf),
+[Jackson databind advisory](https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-cxp5-3px4-pw24),
+[Commons Lang advisory](https://github.com/advisories/GHSA-j288-q9x7-2f5v).

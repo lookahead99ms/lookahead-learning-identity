@@ -54,8 +54,13 @@
           "run": "echo '497c8c2a7e5031f6aa847f88104aa80a93532ec32ee17bdb8d1d2f67a194a9c7  gradle/wrapper/gradle-wrapper.jar' | sha256sum --check --strict"
         },
         {
-          "name": "Test and package including existing security regressions",
-          "run": "./gradlew --no-daemon --no-build-cache clean test bootJar"
+          "name": "Require tests and at least 85 percent whole application line coverage",
+          "run": "./gradlew --no-daemon --no-build-cache clean check bootJar",
+          "env": {
+            "DLV919_DATABASE_URL": "jdbc:postgresql://127.0.0.1:5432/postgres",
+            "DLV920_DATABASE_URL": "jdbc:postgresql://127.0.0.1:5432/postgres",
+            "DLV920_DATABASE_PASSWORD": "synthetic-ci-password-only"
+          }
         },
         {
           "name": "Analyze Java code without publishing source databases or SARIF",
@@ -98,7 +103,19 @@
           "name": "Scan exact builder base, runtime base and built application image",
           "run": "python3 tools/security/check.py images --image lookahead-identity:ci"
         }
-      ]
+      ],
+      "services": {
+        "postgres": {
+          "image": "postgres:17-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0",
+          "env": {
+            "POSTGRES_PASSWORD": "synthetic-ci-password-only"
+          },
+          "ports": [
+            "5432:5432"
+          ],
+          "options": "--health-cmd \"pg_isready -U postgres\" --health-interval 5s --health-timeout 5s --health-retries 10"
+        }
+      }
     }
   }
 }

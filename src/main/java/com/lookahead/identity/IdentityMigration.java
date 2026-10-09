@@ -36,10 +36,12 @@ public final class IdentityMigration {
         try (var connection = java.sql.DriverManager.getConnection(url, properties);
                 var statement = connection.createStatement()) {
             statement.setQueryTimeout(5);
-            try (var result = statement.executeQuery("SELECT current_user='lookahead_identity_migrator' "
-                    + "AND session_user=current_user AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles "
-                    + "WHERE rolname=current_user AND (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls)) "
-                    + "AND NOT pg_catalog.has_database_privilege(current_user,pg_catalog.current_database(),'CREATE')")) {
+            try (var result = statement.executeQuery("""
+                    SELECT current_user='lookahead_identity_migrator'
+                    AND session_user=current_user AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles
+                      WHERE rolname=current_user AND (rolsuper OR rolcreatedb OR rolcreaterole OR rolreplication OR rolbypassrls))
+                    AND NOT pg_catalog.has_database_privilege(current_user,pg_catalog.current_database(),'CREATE')
+                    """)) {
                 if (!result.next() || !result.getBoolean(1))
                     throw new IllegalStateException("Migration database role violates application isolation");
             }

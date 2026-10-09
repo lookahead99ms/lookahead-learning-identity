@@ -16,11 +16,6 @@ src/**
 !src/main/**
 !src/test/
 !src/test/**
-!tools/
-tools/**
-!tools/container/
-tools/container/**
-!tools/container/Healthcheck.java
 
 # Still exclude secrets and generated/private data placed in allowed trees.
 **/.env

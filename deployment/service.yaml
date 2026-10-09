@@ -1,0 +1,149 @@
+# Task/service values are projected into maintained Infra templates. No credentials in YAML.
+schemaVersion: lookahead-service/v2
+service: identity
+shared:
+  port: 8080
+  health:
+    path: /actuator/health/readiness
+    intervalSeconds: 15
+    enabled: true
+    command:
+    - CMD
+    - java
+    - -Xms16m
+    - -Xmx64m
+    - -cp
+    - /opt/lookahead/health
+    - com.lookahead.identity.health.ContainerHealthcheck
+    timeoutSeconds: 5
+    retries: 3
+    startPeriodSeconds: 60
+  settings:
+    LOOKAHEAD_ENVIRONMENT: '@environment'
+    LOOKAHEAD_BIND_ADDRESS: 0.0.0.0
+    PORT: '@service.port'
+    JAVA_TOOL_OPTIONS: '@jvm'
+    APP_OAUTH_CLIENT_ID: '@application.oauthClientId'
+    LOOKAHEAD_OAUTH_ISSUER: '@application.oauthIssuer'
+    LOOKAHEAD_FRONTEND_ORIGIN: '@resources.frontendOrigin'
+    LOOKAHEAD_IDENTITY_JDBC_URL: '@application.identityJdbcUrl'
+    LOOKAHEAD_REGISTRATION_ENABLED: 'false'
+    LOOKAHEAD_SIGNING_PRIVATE_KEY: '@application.identitySigningPrivateKeyPath'
+    LOOKAHEAD_SIGNING_PUBLIC_KEY: '@application.identitySigningPublicKeyPath'
+  resourceRefs:
+  - identityDatabase
+  - frontendOrigin
+  secretRefs:
+  - identityApp
+  - gatewayClient
+  - identityVerifier
+  - identitySigning
+  infrastructureRefs:
+    cluster: persistent.Cluster
+    subnet1: persistent.AppSubnet1
+    subnet2: persistent.AppSubnet2
+    securityGroup: persistent.IdentitySecurity
+    executionRole: persistent.SharedTaskExecutionRoleArn
+    logGroup: persistent.IdentityLogs
+    namespace: persistent.PrivateNamespace
+    taskRole: persistent.SharedApplicationTaskRoleArn
+  runtime:
+    launchType: FARGATE
+    operatingSystem: LINUX
+    cpuArchitecture: X86_64
+    readOnlyRootFilesystem: true
+    assignPublicIp: false
+    platformVersion: 1.4.0
+    networkMode: awsvpc
+    ephemeralStorageGiB: 20
+    stopTimeoutSeconds: 120
+  ingress:
+    mode: private-discovery
+    targetGroupRef: null
+    loadBalancerRef: null
+  monitoring:
+    namespace: AWS/ECS
+    cpuAlarmRef: identity.CpuAlarmArn
+    logs:
+      driver: awslogs
+      streamPrefix: identity
+      region: '@region'
+      mode: non-blocking
+      maxBufferSize: 4m
+  secretEnvironment:
+    LOOKAHEAD_IDENTITY_DB_PASSWORD: identityApp
+    LOOKAHEAD_GATEWAY_CLIENT_SECRET: gatewayClient
+    LOOKAHEAD_IDENTITY_VERIFIER_SECRET: identityVerifier
+  container:
+    name: identity
+    user: 10001:10001
+    essential: true
+    entryPoint:
+    - java
+    - -jar
+    - /opt/lookahead/app.jar
+    workingDirectory: /opt/lookahead
+    family: lookahead-@environment-identity
+  storage:
+    volumeName: temporary
+    mountPath: /tmp
+    readOnly: false
+  deployment:
+    minimumHealthyPercent: 100
+    maximumPercent: 200
+    healthCheckGracePeriodSeconds: 0
+    circuitBreakerEnabled: true
+    rollback: true
+environments:
+  dev:
+    cpu: 512
+    memory: 1024
+    desiredCount: 0
+    imageDigest: null
+    contentReleaseId: null
+    activationEvidence: null
+    scaling:
+      enabled: false
+      minCapacity: 0
+      maxCapacity: 2
+      targetCpuPercent: 60
+      scaleInCooldownSeconds: 300
+      scaleOutCooldownSeconds: 60
+    alarms:
+      enabled: false
+      cpuThresholdPercent: 80
+      periodSeconds: 60
+      evaluationPeriods: 3
+    jvm:
+      xmsMiB: 128
+      xmxMiB: 512
+      nativeHeadroomMiB: 256
+      args:
+      - -XX:+ExitOnOutOfMemoryError
+      - -Djava.io.tmpdir=/tmp
+  prod:
+    cpu: 512
+    memory: 1024
+    desiredCount: 0
+    imageDigest: null
+    contentReleaseId: null
+    activationEvidence: null
+    scaling:
+      enabled: false
+      minCapacity: 0
+      maxCapacity: 4
+      targetCpuPercent: 60
+      scaleInCooldownSeconds: 300
+      scaleOutCooldownSeconds: 60
+    alarms:
+      enabled: false
+      cpuThresholdPercent: 80
+      periodSeconds: 60
+      evaluationPeriods: 3
+    jvm:
+      xmsMiB: 128
+      xmxMiB: 512
+      nativeHeadroomMiB: 256
+      args:
+      - -XX:+ExitOnOutOfMemoryError
+      - -Djava.io.tmpdir=/tmp
