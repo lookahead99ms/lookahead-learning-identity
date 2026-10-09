@@ -115,6 +115,10 @@
           ],
           "options": "--health-cmd \"pg_isready -U postgres\" --health-interval 5s --health-timeout 5s --health-retries 10"
         }
+      },
+      "env": {
+        "CODEQL_ACTION_DIFF_INFORMED_QUERIES": "false",
+        "CODEQL_ACTION_OVERLAY_ANALYSIS": "false"
       }
     }
   }
