@@ -200,3 +200,14 @@ is authorized by these documents.
 The container readiness probe is production Java source at `src/main/java/com/lookahead/identity/health/ContainerHealthcheck.java`, so the ordinary JaCoCo report includes it. Tests use loopback HTTP fixtures to cover healthy and failed responses, malformed bodies, redirects, unavailable endpoints, timeouts and interruption. The container still probes only `127.0.0.1:8080/actuator/health/readiness`, with a two-second connection limit and three-second request limit. The process-exit wrapper remains in the measured source inventory.
 
 Docker resolves the checksum-pinned Gradle wrapper in a source-independent layer before copying build declarations and application sources. This reuses the wrapper download when source files change; dependency versions and the `clean test bootJar` build remain unchanged.
+
+## SAST gate diagnostics
+
+`python3 tools/security/check.py sarif` requires completed CodeQL invocations,
+valid rule/result inventories and exercised, source-bound exceptions. A failure
+prints a reviewed constant reason (for example, missing invocation inventory or
+unexercised exception) while leaving untrusted error text and SARIF messages out
+of public logs. Warning/error notifications still block; this diagnostic change
+does not waive findings or weaken the security gate. Raw SARIF and source
+databases remain unpublished. Run the tooling regressions with
+`python3 -m unittest discover -s tools/security -p 'test_*.py'`.
