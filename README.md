@@ -149,8 +149,10 @@ on the classpath.
 
 Infra provisions the database and roles first. This entry point runs only
 `classpath:db/identity`, disables Flyway clean, and grants DML to the dedicated
-runtime role. Identity readiness checks that role, migration version, and all
-five owned tables. Runtime Flyway execution is disabled.
+runtime role. Identity readiness checks that role, migration version V4, and DML
+on every owned table. Runtime Flyway execution is disabled. V4 adds
+`account_preferences` and `account_profile_links`; run the migration entry point
+before starting an Identity build that includes it, or readiness stays down.
 
 The fresh schema is not a live migration procedure. Existing accounts, stable
 subjects, password hashes, OAuth registrations, active/revoked tokens and
@@ -175,6 +177,32 @@ See [the Local sign-in API and configuration guide](docs/sign-in-api.md) and
 [OpenAPI source](docs/sign-in-openapi.json) for this service's retained Local
 behavior. Historical DEV/PROD policy options remain in the implementation and
 its tests, but this service is no longer selected by the cloud deployment target.
+
+## Account profile, theme and public links
+
+Signed-in account routes (Local Identity mode, proxied by Gateway) use the
+Identity session, its CSRF token, the current credential epoch and an enabled
+account. A stale or missing session returns `401 AUTHENTICATION_REQUIRED`.
+Every response is `Cache-Control: no-store`, and request bodies are bounded to
+8 KiB of well-formed JSON.
+
+| Route | Body | Result |
+| --- | --- | --- |
+| `GET /api/v1/account/profile` | none | Profile view |
+| `POST /api/v1/account/profile` | exactly `{"displayName": string}` | Profile view; otherwise `422 INVALID_PROFILE` |
+| `POST /api/v1/account/preferences` | exactly `{"theme": "light"\|"dark"\|"system"}` | Upserts the theme; profile view; otherwise `422 INVALID_PREFERENCES` |
+| `POST /api/v1/account/links` | exactly `github`, `linkedin`, `x`, `website`, each a string or `null` | Replaces all four links in one transaction; profile view; otherwise `422 INVALID_PROFILE_LINK` |
+
+The profile view is `accountId`, `username`, `displayName`, `themePreference`
+(`system` when nothing is stored) and `links`, which always carries all four
+keys (`null` when unset). For links, `null` or a blank string clears the link;
+other values are stripped and stored unchanged. A link must be at most 300
+code points with no whitespace or control characters, an absolute `https` URI
+with a host, no user-info and no port other than 443. GitHub accepts
+`github.com`/`www.github.com`, LinkedIn `linkedin.com`/`www.linkedin.com`, and X
+`x.com`, `www.x.com`, `twitter.com` or `www.twitter.com`; those three also need a
+non-empty path segment. A website needs a dotted host name that is not an IP
+literal or `localhost`. The error message names the rejected field.
 
 ## Local Identity and the cloud provider split
 
@@ -244,3 +272,14 @@ PR and main security gates require full-repository CodeQL analysis. The pinned
 action disables diff-informed and overlay analysis; reports marked incremental
 are rejected. A changed-lines-only scan cannot certify whole-code security or
 justify retiring an unexercised source-bound exception.
+
+
+## Owner-managed account lookup (DLV-930)
+
+`POST /internal/v1/accounts/lookup` accepts an exact email/username query and
+returns only an enabled account's stable ID, username, display name and profile
+email. The dedicated Domain verifier Basic credential protects this internal
+route; Gateway never exposes it publicly. Domain owns role/grant decisions.
+Local signup still does not verify mailbox ownership and therefore cannot claim
+pending privileged invitations. Cognito remains the cloud identity provider;
+this service is not required in the AWS runtime topology.

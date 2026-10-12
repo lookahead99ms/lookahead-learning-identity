@@ -45,9 +45,10 @@ class TokenVerificationHttpTest {
             useDefaultFilters = false, includeFilters = @org.springframework.context.annotation.ComponentScan.Filter(
                     type = org.springframework.context.annotation.FilterType.ASSIGNABLE_TYPE,
                     classes = TokenVerificationSecurity.class))
-    @Import({TokenVerificationService.class, TokenVerificationController.class,
+    @Import({TokenVerificationService.class, TokenVerificationController.class, AccountDirectoryController.class,
             OAuthStorageFailureFilter.class, AccountErrorHandler.class})
     static class Application {
+        @Bean org.springframework.jdbc.core.JdbcTemplate jdbc() { return mock(org.springframework.jdbc.core.JdbcTemplate.class); }
         @Bean JwtDecoder decoder() {
             return token -> {
                 if (token.equals("outage")) return Jwt.withTokenValue(token).header("alg", "RS256")
@@ -80,6 +81,23 @@ class TokenVerificationHttpTest {
                 "lookahead-web-gateway:synthetic-verifier-secret-with-32-characters"}) {
             var response = send(credentials, "bad");
             assertThat(response.statusCode()).isEqualTo(401);
+            assertThat(response.headers().firstValue("location")).isEmpty();
+            assertThat(response.headers().firstValue("cache-control")).contains("no-store");
+        }
+    }
+    @Test void accountLookupRejectsCookiesAndWrongServiceCredentials() throws Exception {
+        for (String credentials : new String[]{null, "lookahead-domain-verifier:wrong",
+                "lookahead-domain-verifier:synthetic-gateway-secret-with-32-characters",
+                "lookahead-domain-verifier:synthetic-verifier-secret-with-32-characters"}) {
+            var request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/internal/v1/accounts/lookup"))
+                    .header("Content-Type", "application/json").header("Cookie", "JSESSIONID=forged")
+                    .POST(HttpRequest.BodyPublishers.ofString("{}"));
+            if (credentials != null) request.header("Authorization", "Basic " + Base64.getEncoder()
+                    .encodeToString(credentials.getBytes(StandardCharsets.UTF_8)));
+            var response = HttpClient.newHttpClient().send(request.build(), HttpResponse.BodyHandlers.ofString());
+            boolean verified = credentials != null && credentials.endsWith(":synthetic-verifier-secret-with-32-characters");
+            assertThat(response.statusCode()).isEqualTo(verified ? 422 : 401);
+            assertThat(response.headers().firstValue("set-cookie")).isEmpty();
             assertThat(response.headers().firstValue("location")).isEmpty();
             assertThat(response.headers().firstValue("cache-control")).contains("no-store");
         }

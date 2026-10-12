@@ -57,3 +57,14 @@ not establish runtime exploitability or live cloud security.
 References: [Jackson core advisory](https://github.com/FasterXML/jackson-core/security/advisories/GHSA-7hhh-6rmp-j9qf),
 [Jackson databind advisory](https://github.com/FasterXML/jackson-databind/security/advisories/GHSA-cxp5-3px4-pw24),
 [Commons Lang advisory](https://github.com/advisories/GHSA-j288-q9x7-2f5v).
+
+## October 12 source-binding review
+
+The internal security-chain additions invalidated a whole-source SAST exception
+hash. Re-review the complete source diff and relevant authentication tests before
+refreshing a digest; never refresh automatically or widen suppression scope.
+The October 12 review preserves the existing exact rule/file scope and October 19
+expiry. Cookie-only and wrong-credential/scope denial checks remain enforced.
+Negative parser tests intentionally print warning/error notification fixtures;
+those lines alone do not mean hosted analysis failed. A fresh hosted full CI run
+is required after publishing the reviewed binding update.

@@ -57,4 +57,42 @@ class AccountProfileSecurityIntegrationTest {
   var failed=request(first,"POST",path,"{\"displayName\":\"New\"}",token,"application/json");
   assertThat(failed.statusCode()).isEqualTo(503);assertThat(failed.body()).contains("ACCOUNT_STORAGE_UNAVAILABLE").doesNotContain("private database detail");
  }
+ @Test void preferencesAndLinksRequireSessionCsrfAndExactBodies() throws Exception {
+  reset(profiles);
+  var first=browser();var second=browser();
+  String theme="{\"theme\":\"dark\"}";
+  String links="{\"github\":\"https://github.com/avery\",\"linkedin\":null,\"x\":\"\",\"website\":null}";
+  for(String path:new String[]{"/api/v1/account/preferences","/api/v1/account/links"}) {
+   var anonymous=request(first,"POST",path,path.endsWith("links")?links:theme,csrf(first),"application/json");
+   assertThat(anonymous.statusCode()).isEqualTo(401);assertThat(anonymous.body()).contains("AUTHENTICATION_REQUIRED");
+  }
+  assertThat(request(first,"POST","/api/v1/auth/login","username=avery%40example.test&password=long+test+passphrase",csrf(first),"application/x-www-form-urlencoded").statusCode()).isEqualTo(200);
+  var stored=new AccountProfileView.ProfileLinks("https://github.com/avery",null,null,null);
+  when(profiles.updateTheme(any(),anyLong(),eq("dark"))).thenAnswer(c->new AccountProfileView(c.getArgument(0),"avery@example.test","Avery","dark",AccountProfileView.ProfileLinks.EMPTY));
+  when(profiles.updateLinks(any(),anyLong(),any())).thenAnswer(c->new AccountProfileView(c.getArgument(0),"avery@example.test","Avery","system",stored));
+  for(String path:new String[]{"/api/v1/account/preferences","/api/v1/account/links"}) {
+   String body=path.endsWith("links")?links:theme;
+   assertThat(request(first,"POST",path,body,null,"application/json").statusCode()).isEqualTo(403);
+   assertThat(request(first,"POST",path,body,csrf(second),"application/json").statusCode()).isEqualTo(403);
+  }
+  verifyNoInteractions(profiles);
+  String token=csrf(first);
+  var invalidTheme=request(first,"POST","/api/v1/account/preferences","{\"theme\":\"dark\",\"accountId\":\"another\"}",token,"application/json");
+  assertThat(invalidTheme.statusCode()).isEqualTo(422);assertThat(invalidTheme.body()).contains("INVALID_PREFERENCES","Choose light, dark or system.");
+  assertThat(request(first,"POST","/api/v1/account/preferences","[\"dark\"]",token,"application/json").statusCode()).isEqualTo(422);
+  var invalidLinks=request(first,"POST","/api/v1/account/links","{\"github\":null}",token,"application/json");
+  assertThat(invalidLinks.statusCode()).isEqualTo(422);assertThat(invalidLinks.body()).contains("INVALID_PROFILE_LINK","Provide the github, linkedin, x and website fields.");
+  verifyNoInteractions(profiles);
+  var savedTheme=request(first,"POST","/api/v1/account/preferences",theme,token,"application/json");
+  assertThat(savedTheme.statusCode()).isEqualTo(200);assertThat(savedTheme.headers().firstValue("cache-control")).contains("no-store");
+  var themeJson=mapper.readTree(savedTheme.body()).path("data");
+  assertThat(themeJson.path("themePreference").asText()).isEqualTo("dark");
+  assertThat(themeJson.path("links").has("website")).isTrue();assertThat(themeJson.path("links").path("website").isNull()).isTrue();
+  var savedLinks=request(first,"POST","/api/v1/account/links",links,token,"application/json");
+  assertThat(savedLinks.statusCode()).isEqualTo(200);assertThat(savedLinks.headers().firstValue("cache-control")).contains("no-store");
+  assertThat(mapper.readTree(savedLinks.body()).path("data").path("links").path("github").asText()).isEqualTo("https://github.com/avery");
+  var expected=new java.util.HashMap<String,String>();expected.put("github","https://github.com/avery");expected.put("linkedin",null);expected.put("x","");expected.put("website",null);
+  verify(profiles).updateLinks(any(),anyLong(),eq(expected));
+  assertThat(request(first,"GET","/api/v1/account/preferences",null,null,null).statusCode()).isNotEqualTo(200);
+ }
 }
