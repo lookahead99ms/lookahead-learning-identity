@@ -60,6 +60,7 @@ public class AccountSecurityConfig {
                         .requestMatchers("/api/v1/auth/logout").permitAll()
                         .requestMatchers("/api/v1/account/sign-ins","/api/v1/account/sign-ins/revoke","/api/v1/account/sign-ins/revoke-others","/api/v1/account/sign-ins/label").authenticated()
                         .requestMatchers("/api/v1/auth/continue", "/api/v1/auth/me", "/api/v1/account/profile", "/api/v1/account/password").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/account/preferences", "/api/v1/account/links").authenticated()
                         .anyRequest().denyAll();
                 })
                 .exceptionHandling(errors -> errors

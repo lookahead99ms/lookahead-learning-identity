@@ -110,6 +110,24 @@ class IdentityJsonContractTest {
     }
 
     @Test
+    void profileViewAlwaysSerializesThemeAndEveryLinkKey() {
+        var empty = new com.lookahead.identity.dto.AccountProfileView(ACCOUNT_ID, "learner@example.test", "Learner");
+        assertThat(mapper.readTree(mapper.writeValueAsString(new ApiResponse<>(empty, TIMESTAMP)))).isEqualTo(mapper.readTree("""
+                {"data":{"accountId":"00000000-0000-0000-0000-000000000001",
+                 "username":"learner@example.test","displayName":"Learner","themePreference":"system",
+                 "links":{"github":null,"linkedin":null,"x":null,"website":null}},
+                 "timestamp":"2026-09-18T12:34:56Z"}
+                """));
+        var stored = new com.lookahead.identity.dto.AccountProfileView(ACCOUNT_ID, "learner@example.test", "Learner", "dark",
+                new com.lookahead.identity.dto.AccountProfileView.ProfileLinks("https://github.com/a", null, "https://x.com/a", null));
+        assertThat(mapper.readTree(mapper.writeValueAsString(stored))).isEqualTo(mapper.readTree("""
+                {"accountId":"00000000-0000-0000-0000-000000000001",
+                 "username":"learner@example.test","displayName":"Learner","themePreference":"dark",
+                 "links":{"github":"https://github.com/a","linkedin":null,"x":"https://x.com/a","website":null}}
+                """));
+    }
+
+    @Test
     void errorContractPreservesStatusDetailsAndIsoTimestamp() {
         var error = new ApiError(400, "Bad Request", "Request validation failed",
                 "/api/v1/auth/register", List.of("countryCode: must not be blank"), TIMESTAMP);

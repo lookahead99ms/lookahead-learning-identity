@@ -51,12 +51,13 @@ class AccountRequestLimitsFilterTest {
 
     @Test void everyAccountMutationUsesTheSameLimitsAndOtherRequestsAreUntouched() throws Exception {
         for (String path : new String[]{"/api/v1/auth/register", "/api/v1/account/profile",
-                "/api/v1/account/password", "/api/v1/account/sign-ins/revoke",
+                "/api/v1/account/preferences", "/api/v1/account/links", "/api/v1/account/password", "/api/v1/account/sign-ins/revoke",
                 "/api/v1/account/sign-ins/revoke-others", "/api/v1/account/sign-ins/label",
                 "/api/v1/auth/sign-in-challenge/replace", "/api/v1/auth/sign-in-challenge/cancel"}) {
             assertRejected(request("POST", path, new byte[]{'{'}), 400, "MALFORMED_JSON");
         }
         for (var request : new MockHttpServletRequest[]{request("GET", "/api/v1/account/profile", new byte[]{'{'}),
+                request("GET", "/api/v1/account/preferences", new byte[]{'{'}),
                 request("POST", "/oauth2/token", new byte[]{'{'} )}) {
             var called = new AtomicBoolean();
             filter.doFilter(request, new MockHttpServletResponse(), (incoming, response) -> {

@@ -83,7 +83,8 @@ class CredentialEpochDatabaseTest {
         var source=new DriverManagerDataSource(url,"postgres",System.getenv().getOrDefault("DLV920_DATABASE_PASSWORD","synthetic-epoch-test-only")); jdbc=new JdbcTemplate(source);
         String sql=Files.readString(Path.of("src/main/resources/db/identity/V1__identity.sql")).split("REVOKE ALL")[0]
                 +Files.readString(Path.of("src/main/resources/db/identity/V2__credential_epoch.sql"))
-                +Files.readString(Path.of("src/main/resources/db/identity/V3__logical_sign_ins.sql")).split("GRANT SELECT")[0];
+                +Files.readString(Path.of("src/main/resources/db/identity/V3__logical_sign_ins.sql")).split("GRANT SELECT")[0]
+                +Files.readString(Path.of("src/main/resources/db/identity/V4__account_preferences_and_links.sql")).split("GRANT SELECT")[0];
         new ResourceDatabasePopulator(new ByteArrayResource(sql.getBytes(StandardCharsets.UTF_8))).execute(source);
         var generator=java.security.KeyPairGenerator.getInstance("RSA");generator.initialize(3072);var keys=generator.generateKeyPair();
         Path directory=Files.createTempDirectory(Path.of("build"),"epoch-test-keys-");
@@ -247,6 +248,65 @@ class CredentialEpochDatabaseTest {
         first.getBean(PasswordChangeService.class).change(old,new PasswordChangeRequest(legacy,"profile new password","profile new password"));
         assertThatThrownBy(()->profiles.update(id,0,"stale")).hasMessageContaining("Sign in");
         assertThat(profiles.read(id,1).displayName()).isEqualTo("Updated learner");
+    }
+    static Map<String,String> links(String github,String linkedin,String x,String website) {
+        var links=new HashMap<String,String>();links.put("github",github);links.put("linkedin",linkedin);links.put("x",x);links.put("website",website);return links;
+    }
+    @Test void preferencesAndLinksPersistAtomicallyAcrossInstancesAndFailClosed() throws Exception {
+        UUID id=account();var profiles=first.getBean(AccountProfileService.class);var other=second.getBean(AccountProfileService.class);
+        var initial=profiles.read(id,0);
+        assertThat(initial.themePreference()).isEqualTo("system");
+        assertThat(initial.links()).isEqualTo(com.lookahead.identity.dto.AccountProfileView.ProfileLinks.EMPTY);
+        assertThat(profiles.updateTheme(id,0,"dark").themePreference()).isEqualTo("dark");
+        assertThat(other.updateTheme(id,0,"light").themePreference()).isEqualTo("light");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM account_preferences WHERE account_id=?",Integer.class,id)).isEqualTo(1);
+        var saved=profiles.updateLinks(id,0,links(" https://github.com/avery ","https://www.linkedin.com/in/avery",null,"  "));
+        assertThat(saved.links()).isEqualTo(new com.lookahead.identity.dto.AccountProfileView.ProfileLinks("https://github.com/avery","https://www.linkedin.com/in/avery",null,null));
+        assertThat(saved.themePreference()).isEqualTo("light");
+        assertThat(other.read(id,0)).isEqualTo(saved);
+        var renamed=profiles.update(id,0,"Renamed learner");
+        assertThat(renamed.displayName()).isEqualTo("Renamed learner");
+        assertThat(renamed.themePreference()).isEqualTo("light");assertThat(renamed.links()).isEqualTo(saved.links());
+        jdbc.execute("CREATE FUNCTION reject_website_link() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.kind='website' THEN RAISE EXCEPTION 'synthetic link failure'; END IF; RETURN NEW; END; $$");
+        jdbc.execute("CREATE TRIGGER website_link_failure BEFORE INSERT ON account_profile_links FOR EACH ROW EXECUTE FUNCTION reject_website_link()");
+        try {
+            assertThatThrownBy(()->profiles.updateLinks(id,0,links("https://github.com/replaced",null,"https://x.com/avery","https://avery.example.dev")))
+                    .isInstanceOf(org.springframework.dao.DataAccessException.class);
+        } finally {
+            jdbc.execute("DROP TRIGGER website_link_failure ON account_profile_links");
+            jdbc.execute("DROP FUNCTION reject_website_link()");
+        }
+        assertThat(other.read(id,0).links()).isEqualTo(saved.links());
+        var cleared=profiles.updateLinks(id,0,links(null,"",null,"https://avery.example.dev"));
+        assertThat(cleared.links()).isEqualTo(new com.lookahead.identity.dto.AccountProfileView.ProfileLinks(null,null,null,"https://avery.example.dev"));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM account_profile_links WHERE account_id=?",Integer.class,id)).isEqualTo(1);
+        assertThatThrownBy(()->profiles.updateTheme(id,1,"dark")).hasMessageContaining("Sign in");
+        assertThatThrownBy(()->profiles.updateLinks(id,1,links(null,null,null,null))).hasMessageContaining("Sign in");
+        assertThat(profiles.read(id,0).themePreference()).isEqualTo("light");
+        UUID another=account();
+        assertThatThrownBy(()->jdbc.update("INSERT INTO account_preferences(account_id,theme) VALUES (?,?)",another,"sepia"))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        assertThatThrownBy(()->jdbc.update("INSERT INTO account_profile_links(account_id,kind,url) VALUES (?,?,?)",another,"mastodon","https://a.example"))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        jdbc.update("UPDATE accounts SET enabled=false WHERE id=?",id);
+        assertThatThrownBy(()->profiles.updateTheme(id,0,"dark")).hasMessageContaining("Sign in");
+        assertThatThrownBy(()->profiles.read(id,0)).hasMessageContaining("Sign in");
+        jdbc.update("DELETE FROM accounts WHERE id=?",id);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM account_preferences WHERE account_id=?",Integer.class,id)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM account_profile_links WHERE account_id=?",Integer.class,id)).isZero();
+    }
+    @Test void preferencesAndLinksOverRealSessionsAndCsrf() throws Exception {
+        UUID id=account();var browser=browser();login(first,browser,id,legacy);String token=csrf(first,browser);
+        var theme=request(first,browser,"POST","/api/v1/account/preferences","{\"theme\":\"dark\"}",token,"application/json");
+        assertThat(theme.statusCode()).isEqualTo(200);assertThat(theme.headers().firstValue("cache-control")).contains("no-store");
+        var links=request(first,browser,"POST","/api/v1/account/links","{\"github\":\"https://github.com/avery\",\"linkedin\":null,\"x\":null,\"website\":null}",token,"application/json");
+        assertThat(links.statusCode()).isEqualTo(200);
+        var invalid=request(first,browser,"POST","/api/v1/account/links","{\"github\":\"http://github.com/avery\",\"linkedin\":null,\"x\":null,\"website\":null}",token,"application/json");
+        assertThat(invalid.statusCode()).isEqualTo(422);assertThat(invalid.body()).contains("INVALID_PROFILE_LINK","GitHub");
+        var data=mapper.readTree(request(first,browser,"GET","/api/v1/account/profile",null,null,null).body()).path("data");
+        assertThat(data.path("themePreference").asText()).isEqualTo("dark");
+        assertThat(data.path("links").path("github").asText()).isEqualTo("https://github.com/avery");
+        assertThat(data.path("links").path("x").isNull()).isTrue();
     }
     @Test void concurrentPasswordChangesHaveOneWinner() throws Exception {
         UUID id=account();var pool=Executors.newFixedThreadPool(2);var start=new CountDownLatch(1);
