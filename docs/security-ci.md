@@ -68,3 +68,26 @@ expiry. Cookie-only and wrong-credential/scope denial checks remain enforced.
 Negative parser tests intentionally print warning/error notification fixtures;
 those lines alone do not mean hosted analysis failed. A fresh hosted full CI run
 is required after publishing the reviewed binding update.
+
+## October 16 source-binding review
+
+The consolidated Local PR added GET-only internal account-directory routes to
+`TokenVerificationSecurity`. The existing exception therefore failed its exact
+source hash check before CodeQL ran. Re-review found the same dedicated service
+Basic credential, stateless session policy, verifier role, and denial of all
+unlisted methods. The POST endpoints remain token verification and account
+lookup; the new directory routes are GET-only. The exception remains
+limited to the same rule and file and retains the October 19 expiry. The
+source digest and rationale were updated after this review; hosted full CodeQL
+must still run and exercise the exception before the PR is accepted.
+
+The next hosted run passed the Python security gate and Java coverage, then
+CodeQL reported `java/spring-disabled-csrf-protection` in
+`TestAccountSecurity`. Review of that complete source found a separate Local-only
+operator credential, stateless HTTP Basic authentication on the internal
+maintenance routes, no cookie authentication, and denial of unlisted methods.
+`TestAccountHttpTest` checks cookie-only and wrong credentials receive 401 and
+no `Set-Cookie`; successful operator requests also create no cookie. A second
+exception is bound to this exact rule and file digest, with the same October 19
+expiry and DLV-804 owner. It does not suppress another rule or file. A new hosted
+CodeQL run is required before accepting the PR.

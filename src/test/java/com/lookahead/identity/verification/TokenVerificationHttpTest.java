@@ -115,4 +115,15 @@ class TokenVerificationHttpTest {
         assertThat(response.body()).contains("ACCOUNT_STORAGE_UNAVAILABLE").doesNotContain("private SQL", "outage");
         assertThat(response.headers().firstValue("cache-control")).contains("no-store");
     }
+    @Test void accountEnumerationRequiresServiceCredentialsAndRejectsBadPages() throws Exception {
+        for(String credentials:new String[]{null,"lookahead-domain-verifier:wrong","lookahead-domain-verifier:synthetic-verifier-secret-with-32-characters"}) {
+            var request=HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+"/internal/v1/accounts?page=-1"));
+            request.header("Cookie","JSESSIONID=forged");
+            if(credentials!=null)request.header("Authorization","Basic "+Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8)));
+            var response=HttpClient.newHttpClient().send(request.GET().build(),HttpResponse.BodyHandlers.ofString());
+            assertThat(response.statusCode()).isEqualTo(credentials!=null&&credentials.endsWith("with-32-characters")?422:401);
+            assertThat(response.headers().firstValue("cache-control")).contains("no-store");
+            assertThat(response.headers().firstValue("set-cookie")).isEmpty();
+        }
+    }
 }

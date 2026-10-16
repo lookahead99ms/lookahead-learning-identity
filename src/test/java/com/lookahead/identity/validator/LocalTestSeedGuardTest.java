@@ -48,6 +48,13 @@ class LocalTestSeedGuardTest {
                 .isInstanceOf(IllegalStateException.class);
     }
 
+    @Test void managedMaintenancePreservesAuthorCapabilityWithoutRunningLegacySeeder() {
+        var env=valid().withProperty("app.local-test.seed-enabled","false").withProperty("app.local-test.author-enabled","true").withProperty("app.test-accounts.enabled","true");
+        assertThatCode(()->new LocalTestSeedGuard(env)).doesNotThrowAnyException();
+        env.setActiveProfiles("local-test");
+        assertThatThrownBy(()->new LocalTestSeedGuard(env)).isInstanceOf(RuntimeException.class);
+    }
+
     private MockEnvironment valid() {
         var environment = new MockEnvironment().withProperty("app.local-test.seed-enabled", "true")
                 .withProperty("app.deployment-environment", "local")

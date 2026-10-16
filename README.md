@@ -283,3 +283,61 @@ route; Gateway never exposes it publicly. Domain owns role/grant decisions.
 Local signup still does not verify mailbox ownership and therefore cannot claim
 pending privileged invitations. Cognito remains the cloud identity provider;
 this service is not required in the AWS runtime topology.
+
+## DLV-961 test-account maintenance (not activated)
+
+The optional internal Identity maintenance API manages `learner01`–`learner27`,
+`coauthor01`–`coauthor02` and `admin01`–`admin06`. The existing author is outside
+this roster and is never seeded, adopted or password-rotated by these endpoints.
+V5 adds an explicit test-account registry without modifying existing account data.
+Seeding adopts matching stable fixture IDs and creates only missing accounts;
+existing passwords, profiles and enabled states are preserved. Conflicting IDs
+abort the transaction. Domain grants, purchases and study plans are separate work.
+
+Both POST endpoints are disabled by default:
+
+- `/internal/v1/test-accounts/seed`: returns account IDs, usernames and whether each
+  identity was created.
+- `/internal/v1/test-accounts/passwords`: returns only `{ "updated": N }`, rotates
+  registered targets and invalidates their credential epochs and sessions.
+
+DLV-962 adds three private Local-only operator POST routes: `provision` creates a
+disabled independent learner login, `activate` enables it after Domain records
+the learner, and `disable` immediately blocks login, advances the credential
+epoch, scrubs the password hash even if activation never completed, and erases
+authorizations, sign-ins, profile, preferences and links. A registry tombstone
+survives deletion. The generated learner name is `test-` plus 24 hexadecimal
+characters; managed roster staff identities can be disabled after Domain
+authorizes the current role hierarchy. A disabled roster identity stays
+disabled across seed and password rotation. These are
+active on the working Local stack behind 4301 as of 2026-10-16. Stable4300
+remains separate.
+
+Each body contains `learnerPassword` and `staffPassword`; supply these only from
+Infra secret files. The dedicated Basic username is `lookahead-test-account-operator`.
+Its secret is `app.test-accounts.operator-secret` (at least 32 characters, distinct
+from the Gateway client and token-verifier secrets). Enabling additionally requires
+`app.test-accounts.enabled=true`, deployment environment `local`, and the
+`accounts`/`local-test` profiles. DEV and production profiles fail closed. Do not
+route these internal endpoints through the browser Gateway. DEV provider-backed
+provisioning is not implemented or activated by this local Identity mechanism.
+
+Username lookup also accepts a registered profile email, or the reserved
+`username@lookahead.test` alias of an explicitly registered test fixture. Ambiguous
+matches fail closed; adopting an old fixture does not replace its profile email.
+
+The Infra task branch contains `scripts/test_accounts_password.py`. Its receipt
+contains only the update count, and its managed staff group has eight accounts;
+the existing author's credential remains independent. No deployment or startup
+integration is claimed yet. DLV-961 still owns orchestration, reset, UI integration,
+Domain state and final cross-service documentation/verification.
+
+## People account directory
+
+Private `GET /internal/v1/accounts?query=&page=0` lists enabled accounts in stable pages of 50 for the Domain verifier credential only. Literal case-insensitive username/display-name/email search; page 0–100000, query up to 254 characters. No password fields, no writes, no-store responses. This route is never exposed through Gateway.
+Exact `GET /internal/v1/accounts/{id}` uses the same verifier credential and
+returns only an enabled account for Domain maintenance. The separate Local
+operator `POST /internal/v1/test-accounts/disable-real` accepts an account ID
+after Domain has checked owner authority and free learner state; it rejects the
+author and managed test accounts, disables sign-in, removes credentials and
+profile data, and revokes sessions. This does not disable a DEV provider account.

@@ -32,7 +32,7 @@ class SignInRegistryDatabaseTest {
         schema="signin_"+UUID.randomUUID().toString().replace("-","");admin.execute("CREATE SCHEMA "+schema);
         source=new DriverManagerDataSource(url+(url.contains("?")?"&":"?")+"currentSchema="+schema,"postgres",password);
         jdbc=new JdbcTemplate(source);
-        String sql=Files.readString(Path.of("src/main/resources/db/identity/V1__identity.sql")).split("REVOKE ALL")[0]+Files.readString(Path.of("src/main/resources/db/identity/V2__credential_epoch.sql"))+Files.readString(Path.of("src/main/resources/db/identity/V3__logical_sign_ins.sql")).split("GRANT SELECT")[0];
+        String sql=Files.readString(Path.of("src/main/resources/db/identity/V1__identity.sql")).split("REVOKE ALL")[0]+Files.readString(Path.of("src/main/resources/db/identity/V2__credential_epoch.sql"))+Files.readString(Path.of("src/main/resources/db/identity/V3__logical_sign_ins.sql")).split("GRANT SELECT")[0]+Files.readString(Path.of("src/main/resources/db/identity/V5__test_account_registry.sql")).split("GRANT SELECT")[0];
         new ResourceDatabasePopulator(new ByteArrayResource(sql.getBytes(StandardCharsets.UTF_8))).execute(source);
     }
     @BeforeEach void instances(){clock=new MutableClock();first=service();second=service();}

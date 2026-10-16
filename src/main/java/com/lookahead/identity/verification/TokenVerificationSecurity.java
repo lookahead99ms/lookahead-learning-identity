@@ -46,13 +46,14 @@ public class TokenVerificationSecurity {
                 return UsernamePasswordAuthenticationToken.class.isAssignableFrom(authentication);
             }
         };
-        http.securityMatcher("/internal/v1/tokens/verify", "/internal/v1/accounts/lookup")
+        http.securityMatcher("/internal/v1/tokens/verify", "/internal/v1/accounts/lookup", "/internal/v1/accounts", "/internal/v1/accounts/*")
                 .authenticationManager(new ProviderManager(provider))
                 .csrf(AbstractHttpConfigurer::disable)
                 .requestCache(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(access -> access
                         .requestMatchers(HttpMethod.POST, "/internal/v1/tokens/verify", "/internal/v1/accounts/lookup").hasRole("TOKEN_VERIFIER")
+                        .requestMatchers(HttpMethod.GET, "/internal/v1/accounts", "/internal/v1/accounts/*").hasRole("TOKEN_VERIFIER")
                         .anyRequest().denyAll())
                 .httpBasic(basic -> basic.authenticationEntryPoint((request, response, error) -> {
                     response.setStatus(401);
