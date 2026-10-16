@@ -26,7 +26,7 @@ class TestAccountDatabaseTest {
         var migrations=Path.of("src/main/resources/db/identity");
         jdbc.execute(Files.readString(migrations.resolve("V1__identity.sql")).split("REVOKE ALL")[0]);
         for(String file:List.of("V2__credential_epoch.sql","V3__logical_sign_ins.sql",
-                "V4__account_preferences_and_links.sql","V5__test_account_registry.sql"))
+                "V4__account_preferences_and_links.sql","V5__test_account_registry.sql","V6__created_test_accounts.sql"))
             jdbc.execute(Files.readString(migrations.resolve(file)).split("GRANT SELECT")[0]);
         PasswordEncoder encoder=new PasswordEncoder() {
             public String encode(CharSequence value) { return "synthetic-test-hash:"+value; }
@@ -83,6 +83,34 @@ class TestAccountDatabaseTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts WHERE credential_epoch=1",Integer.class)).isEqualTo(35);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts WHERE password_hash='synthetic-test-hash:rotated-synthetic-learners'",Integer.class)).isEqualTo(27);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts WHERE password_hash='synthetic-test-hash:rotated-synthetic-staff'",Integer.class)).isEqualTo(8);
+    }
+    @Test void createdIdentityRemainsDisabledUntilActivationAndDeletionRevokesIt() {
+        UUID id=UUID.randomUUID();String username="test-0123456789abcdef01234567";
+        transaction.execute(status -> service.provision(id,username,"synthetic-learner-fixture-only"));
+        assertThat(jdbc.queryForObject("SELECT enabled FROM accounts WHERE id=?",Boolean.class,id)).isFalse();
+        transaction.executeWithoutResult(status -> service.activate(id,username));
+        assertThat(jdbc.queryForObject("SELECT enabled FROM accounts WHERE id=?",Boolean.class,id)).isTrue();
+        jdbc.update("INSERT INTO account_preferences(account_id,theme) VALUES (?,'dark')",id);
+        jdbc.update("INSERT INTO account_profile_links(account_id,kind,url) VALUES (?,'github','https://example.test/test')",id);
+        UUID signInId=UUID.randomUUID();
+        jdbc.update("INSERT INTO logical_sign_ins(id,account_id,credential_epoch,binding_digest,created_at,last_active_at,recent_auth_at) VALUES (?,?,0,'synthetic',now(),now(),now())",signInId,id);
+        jdbc.update("INSERT INTO sign_in_challenges(token_digest,account_id,credential_epoch,binding_digest,client_description,created_at,expires_at,admitted_id) VALUES ('synthetic',?,0,'synthetic','Browser',now(),now()+interval '1 hour',?)",id,signInId);
+        transaction.executeWithoutResult(status -> service.disable(id,username));
+        assertThat(jdbc.queryForObject("SELECT enabled FROM accounts WHERE id=?",Boolean.class,id)).isFalse();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM account_profiles WHERE account_id=?",Integer.class,id)).isZero();
+        for(String table:List.of("account_preferences","account_profile_links","logical_sign_ins","sign_in_challenges"))
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM "+table+" WHERE account_id=?",Integer.class,id)).as(table).isZero();
+        assertThat(jdbc.queryForObject("SELECT creation_state FROM test_accounts WHERE account_id=?",String.class,id)).isEqualTo("deleted");
+        assertThatThrownBy(() -> transaction.executeWithoutResult(status -> service.activate(id,username))).hasMessageContaining("unavailable");
+    }
+    @Test void deletingNeverActivatedIdentityScrubsPasswordAndIsRepeatable() {
+        UUID id=UUID.randomUUID();String username="test-fedcba9876543210fedcba98";
+        transaction.executeWithoutResult(status -> service.provision(id,username,"synthetic-learner-fixture-only"));
+        transaction.executeWithoutResult(status -> service.disable(id,username));
+        assertThat(jdbc.queryForObject("SELECT password_hash FROM accounts WHERE id=?",String.class,id)).isEqualTo("deleted");
+        assertThat(jdbc.queryForObject("SELECT credential_epoch FROM accounts WHERE id=?",Integer.class,id)).isEqualTo(1);
+        transaction.executeWithoutResult(status -> service.disable(id,username));
+        assertThat(jdbc.queryForObject("SELECT credential_epoch FROM accounts WHERE id=?",Integer.class,id)).isEqualTo(1);
     }
     @Test void directoryIncludesRealUnassignedAccountsAndSearchesLiteralText() {
         var directory=new com.lookahead.identity.verification.AccountDirectoryController(jdbc);

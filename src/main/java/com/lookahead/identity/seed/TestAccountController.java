@@ -1,6 +1,7 @@
 package com.lookahead.identity.seed;
 
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpServletResponse;
@@ -20,5 +21,20 @@ public class TestAccountController {
     }
     @PostMapping("/passwords") public Object passwords(@RequestBody Passwords passwords) {
         return Map.of("updated", service.rotate(passwords.learnerPassword(), passwords.staffPassword()));
+    }
+    public record Provision(UUID accountId, String username, String password) {
+        @Override public String toString() { return "Provision[redacted]"; }
+    }
+    public record AccountRef(UUID accountId, String username) {}
+    @PostMapping("/provision") public Object provision(@RequestBody Provision request) {
+        return service.provision(request.accountId(), request.username(), request.password());
+    }
+    @PostMapping("/activate") public Object activate(@RequestBody AccountRef request) {
+        service.activate(request.accountId(), request.username());
+        return Map.of("active", true);
+    }
+    @PostMapping("/disable") public Object disable(@RequestBody AccountRef request) {
+        service.disable(request.accountId(), request.username());
+        return Map.of("disabled", true);
     }
 }

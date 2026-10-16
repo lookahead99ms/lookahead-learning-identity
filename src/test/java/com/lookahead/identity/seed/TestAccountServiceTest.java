@@ -77,4 +77,68 @@ class TestAccountServiceTest {
         verify(jdbc).update("UPDATE logical_sign_ins SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE account_id=?", first.accountId());
         verify(jdbc).update("UPDATE sign_in_challenges SET cancelled=true WHERE account_id=?", first.accountId());
     }
+
+    @Test void provisionCreatesDisabledIndependentLoginAndOnlyActivateEnablesIt() {
+        UUID accountId = UUID.randomUUID();
+        String username = "test-0123456789abcdef01234567";
+        when(jdbc.queryForObject(anyString(), eq(Boolean.class), eq(accountId), eq(username))).thenReturn(false);
+        when(encoder.encode(LEARNER)).thenReturn("synthetic-encoded-value");
+        when(jdbc.update(startsWith("UPDATE accounts SET enabled=true"),
+                eq(accountId), eq(username), eq(accountId), eq(username))).thenReturn(1);
+        assertThat(service.provision(accountId, username, LEARNER).created()).isTrue();
+        verify(jdbc).update("INSERT INTO accounts(id,username,display_name,password_hash,enabled) VALUES (?,?,?,?,false)",
+                accountId, username, "Test Learner", "synthetic-encoded-value");
+        verify(jdbc).update("INSERT INTO test_accounts(account_id,username,creation_state,last_changed_by) VALUES (?,?,'pending','managed-creation')",
+                accountId, username);
+        service.activate(accountId, username);
+        verify(jdbc).update(startsWith("UPDATE accounts SET enabled=true"),
+                eq(accountId), eq(username), eq(accountId), eq(username));
+    }
+
+    @Test void provisionRetryDoesNotChangeAnExistingPassword() {
+        UUID accountId = UUID.randomUUID();
+        String username = "test-0123456789abcdef01234567";
+        when(jdbc.queryForList(contains("creation_state IN"), eq(UUID.class), eq(accountId), eq(username)))
+                .thenReturn(List.of(accountId));
+        assertThat(service.provision(accountId, username, LEARNER).created()).isFalse();
+        verifyNoInteractions(encoder);
+        verify(jdbc, never()).update(anyString(), any(Object[].class));
+    }
+
+    @Test void provisionRejectsReservedNamesAndExistingRealAccounts() {
+        UUID accountId = UUID.randomUUID();
+        assertThatThrownBy(() -> service.provision(accountId, "admin01", LEARNER))
+                .hasMessageContaining("Invalid managed test account");
+        String username = "test-0123456789abcdef01234567";
+        when(jdbc.queryForObject(anyString(), eq(Boolean.class), eq(accountId), eq(username))).thenReturn(true);
+        assertThatThrownBy(() -> service.provision(accountId, username, LEARNER))
+                .hasMessageContaining("already in use");
+        verifyNoInteractions(encoder);
+    }
+
+    @Test void disableRevokesLoginAndErasesProfileButKeepsRegistryTombstone() {
+        UUID accountId = UUID.randomUUID();
+        String username = "test-0123456789abcdef01234567";
+        when(jdbc.queryForList(contains("creation_state IN ('pending','active','deleted')"), eq(UUID.class), eq(accountId), eq(username)))
+                .thenReturn(List.of(accountId));
+        service.disable(accountId, username);
+        verify(jdbc).update(startsWith("UPDATE accounts SET enabled=false"), eq(accountId), eq(username));
+        verify(jdbc).update("DELETE FROM oauth2_authorization WHERE principal_name=?", accountId.toString());
+        verify(jdbc).update("DELETE FROM logical_sign_ins WHERE account_id=?", accountId);
+        verify(jdbc).update("DELETE FROM sign_in_challenges WHERE account_id=?", accountId);
+        verify(jdbc).update("DELETE FROM account_preferences WHERE account_id=?", accountId);
+        verify(jdbc).update("DELETE FROM account_profile_links WHERE account_id=?", accountId);
+        verify(jdbc).update("DELETE FROM account_profiles WHERE account_id=?", accountId);
+        verify(jdbc).update(contains("creation_state='deleted'"), eq(accountId), eq(username));
+        assertThatThrownBy(() -> service.activate(accountId, username)).hasMessageContaining("unavailable");
+    }
+    @Test void disableRejectsStaffButPermitsAnExplicitFixedLearner() {
+        var staff=TestAccountRoster.entries().stream().filter(TestAccountRoster.Entry::staff).findFirst().orElseThrow();
+        assertThatThrownBy(() -> service.disable(staff.accountId(),staff.username())).hasMessageContaining("Invalid managed test account");
+        var learner=TestAccountRoster.entries().stream().filter(entry -> !entry.staff()).findFirst().orElseThrow();
+        when(jdbc.queryForList(contains("creation_state IN ('pending','active','deleted')"), eq(UUID.class),
+                eq(learner.accountId()), eq(learner.username()))).thenReturn(List.of(learner.accountId()));
+        service.disable(learner.accountId(),learner.username());
+        verify(jdbc).update(contains("creation_state='deleted'"),eq(learner.accountId()),eq(learner.username()));
+    }
 }

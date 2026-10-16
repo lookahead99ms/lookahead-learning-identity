@@ -301,6 +301,16 @@ Both POST endpoints are disabled by default:
 - `/internal/v1/test-accounts/passwords`: returns only `{ "updated": N }`, rotates
   registered targets and invalidates their credential epochs and sessions.
 
+DLV-962 adds three private Local-only operator POST routes: `provision` creates a
+disabled independent learner login, `activate` enables it after Domain records
+the learner, and `disable` immediately blocks login, advances the credential
+epoch, scrubs the password hash even if activation never completed, and erases
+authorizations, sign-ins, profile, preferences and links. A registry tombstone
+survives deletion. The generated learner name is `test-` plus 24 hexadecimal
+characters; staff identities cannot pass the disable contract. These are
+active on the working Local stack behind 4301 as of 2026-10-16. Stable4300
+remains separate.
+
 Each body contains `learnerPassword` and `staffPassword`; supply these only from
 Infra secret files. The dedicated Basic username is `lookahead-test-account-operator`.
 Its secret is `app.test-accounts.operator-secret` (at least 32 characters, distinct

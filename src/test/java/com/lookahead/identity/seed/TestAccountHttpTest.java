@@ -67,4 +67,15 @@ class TestAccountHttpTest {
         assertThat(new TestAccountController.Passwords("private-one","private-two").toString())
                 .doesNotContain("private-one","private-two");
     }
+    @Test void creationAndDeletionEndpointsRequireTheOperatorAndDoNotExposePasswords() throws Exception {
+        for (String operation : List.of("provision", "activate", "disable")) {
+            assertThat(send("POST",operation,null).statusCode()).isEqualTo(401);
+            var success=send("POST",operation,OPERATOR);
+            assertThat(success.statusCode()).isEqualTo(200);
+            assertThat(success.headers().firstValue("cache-control")).contains("no-store");
+            assertThat(success.body()).doesNotContain("synthetic-learner-only");
+        }
+        assertThat(new TestAccountController.Provision(java.util.UUID.randomUUID(),"test-0123456789abcdef01234567","private-password").toString())
+                .doesNotContain("private-password");
+    }
 }
