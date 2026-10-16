@@ -44,8 +44,10 @@ class SecurityGateTests(unittest.TestCase):
     def test_repository_sast_exception_binding_is_current(self):
         exceptions = checks.load_sast_exceptions()
         self.assertEqual({('java/spring-disabled-csrf-protection',
-            'src/main/java/com/lookahead/identity/verification/TokenVerificationSecurity.java')}, set(exceptions))
-        self.assertEqual('2026-10-19', next(iter(exceptions.values()))['expiresAt'])
+            'src/main/java/com/lookahead/identity/verification/TokenVerificationSecurity.java'),
+            ('java/spring-disabled-csrf-protection',
+            'src/main/java/com/lookahead/identity/seed/TestAccountSecurity.java')}, set(exceptions))
+        self.assertEqual({'2026-10-19'}, {item['expiresAt'] for item in exceptions.values()})
 
     def test_trace_notifications_are_informational_but_warnings_still_block(self):
         run = {'tool': {'driver': {'name': 'CodeQL', 'rules': [{'id': 'fixture'}]}},

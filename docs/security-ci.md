@@ -80,3 +80,14 @@ lookup; the new directory routes are GET-only. The exception remains
 limited to the same rule and file and retains the October 19 expiry. The
 source digest and rationale were updated after this review; hosted full CodeQL
 must still run and exercise the exception before the PR is accepted.
+
+The next hosted run passed the Python security gate and Java coverage, then
+CodeQL reported `java/spring-disabled-csrf-protection` in
+`TestAccountSecurity`. Review of that complete source found a separate Local-only
+operator credential, stateless HTTP Basic authentication on the internal
+maintenance routes, no cookie authentication, and denial of unlisted methods.
+`TestAccountHttpTest` checks cookie-only and wrong credentials receive 401 and
+no `Set-Cookie`; successful operator requests also create no cookie. A second
+exception is bound to this exact rule and file digest, with the same October 19
+expiry and DLV-804 owner. It does not suppress another rule or file. A new hosted
+CodeQL run is required before accepting the PR.

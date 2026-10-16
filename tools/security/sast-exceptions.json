@@ -8,6 +8,14 @@
       "expiresAt": "2026-10-19",
       "ticket": "DLV-804",
       "rationale": "This stateless internal verifier chain accepts only dedicated service HTTP Basic credentials, never browser cookies. The 2026-10-16 review covers POST token verification and account lookup plus GET-only internal account directory routes; every route requires the verifier role and all other methods are denied. CSRF does not protect these non-browser, non-cookie calls. Cookie-only and incorrect credentials remain denied by integration tests. Fresh hosted CodeQL analysis remains required."
+    },
+    {
+      "ruleId": "java/spring-disabled-csrf-protection",
+      "file": "src/main/java/com/lookahead/identity/seed/TestAccountSecurity.java",
+      "sourceSha256": "5538724b7bb6c0a55c2d0288db68d0060cd6a92bdd8a751c56db60a8a84afbab",
+      "expiresAt": "2026-10-19",
+      "ticket": "DLV-804",
+      "rationale": "The 2026-10-16 CodeQL review covers only the dedicated internal test-account operator chain. It is enabled only in Local, requires a separate long operator secret in HTTP Basic on each request, creates no session, and denies every unlisted method. Browser cookies alone and wrong credentials receive 401 without a Set-Cookie response in TestAccountHttpTest. CSRF tokens do not protect this non-browser, non-cookie maintenance channel. This file-scoped exception expires on 2026-10-19 and requires fresh hosted CodeQL validation."
     }
   ]
 }
