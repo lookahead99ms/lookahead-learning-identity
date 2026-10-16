@@ -29,11 +29,13 @@ public class AccountRepository {
 
     public Optional<AccountCredentials> findByUsername(String username) {
         var accounts = jdbc.query("""
-                SELECT id, username, display_name, password_hash, enabled, credential_epoch
-                FROM accounts WHERE username = ?
+                SELECT a.id, a.username, a.display_name, a.password_hash, a.enabled, a.credential_epoch
+                FROM accounts a WHERE a.username = ?
+                  OR EXISTS (SELECT 1 FROM account_profiles p WHERE p.account_id=a.id AND p.email=?)
+                  OR EXISTS (SELECT 1 FROM test_accounts t WHERE t.account_id=a.id AND t.username || '@lookahead.test'=?)
                 """, (row, index) -> new AccountCredentials(row.getObject("id", UUID.class),
                 row.getString("username"), row.getString("display_name"),
-                row.getString("password_hash"), row.getBoolean("enabled"), row.getLong("credential_epoch")), username);
+                row.getString("password_hash"), row.getBoolean("enabled"), row.getLong("credential_epoch")), username, username, username);
         return accounts.size() == 1 ? Optional.of(accounts.getFirst()) : Optional.empty();
     }
 }

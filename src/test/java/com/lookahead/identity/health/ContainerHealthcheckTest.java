@@ -94,7 +94,7 @@ class ContainerHealthcheckTest {
     }
 
     @Test void timeoutIsUnhealthyAndRequestIsBounded() throws Exception {
-        HttpClient client = mock(HttpClient.class);
+        HttpClient client = mock(HttpClient.class, withSettings().mockMaker(org.mockito.MockMakers.SUBCLASS));
         when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
                 .thenThrow(new HttpTimeoutException("synthetic timeout"));
         assertEquals(1, ContainerHealthcheck.check(client, uri));
@@ -106,7 +106,7 @@ class ContainerHealthcheckTest {
     }
 
     @Test void interruptedProbeFailsAndRestoresInterruptFlag() throws Exception {
-        HttpClient client = mock(HttpClient.class);
+        HttpClient client = mock(HttpClient.class, withSettings().mockMaker(org.mockito.MockMakers.SUBCLASS));
         when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
                 .thenThrow(new InterruptedException("synthetic interruption"));
         try {

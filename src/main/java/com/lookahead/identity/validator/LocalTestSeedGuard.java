@@ -10,6 +10,8 @@ import java.nio.charset.StandardCharsets;
 @Component
 public class LocalTestSeedGuard {
     public LocalTestSeedGuard(Environment environment) {
+        boolean managed = environment.getProperty("app.test-accounts.enabled", Boolean.class, false);
+        if (managed) new com.lookahead.identity.seed.TestAccountPolicy(environment).requireEnabled();
         boolean localTest = environment.acceptsProfiles(Profiles.of("local-test"));
         boolean seedEnabled = environment.getProperty("app.local-test.seed-enabled", Boolean.class, false);
         boolean localEnvironment = "local".equals(environment.getProperty("app.deployment-environment"));
@@ -22,7 +24,7 @@ public class LocalTestSeedGuard {
             throw new IllegalStateException("Synthetic account seeding requires accounts, local-test, and deployment environment local");
         }
         boolean authorEnabled = environment.getProperty("app.local-test.author-enabled", Boolean.class, false);
-        if (authorEnabled && !seedEnabled) {
+        if (authorEnabled && !seedEnabled && !managed) {
             throw new IllegalStateException("Local author access requires explicitly enabled local synthetic accounts");
         }
         if (seedEnabled) {

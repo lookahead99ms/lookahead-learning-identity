@@ -84,7 +84,8 @@ class CredentialEpochDatabaseTest {
         String sql=Files.readString(Path.of("src/main/resources/db/identity/V1__identity.sql")).split("REVOKE ALL")[0]
                 +Files.readString(Path.of("src/main/resources/db/identity/V2__credential_epoch.sql"))
                 +Files.readString(Path.of("src/main/resources/db/identity/V3__logical_sign_ins.sql")).split("GRANT SELECT")[0]
-                +Files.readString(Path.of("src/main/resources/db/identity/V4__account_preferences_and_links.sql")).split("GRANT SELECT")[0];
+                +Files.readString(Path.of("src/main/resources/db/identity/V4__account_preferences_and_links.sql")).split("GRANT SELECT")[0]
+                +Files.readString(Path.of("src/main/resources/db/identity/V5__test_account_registry.sql")).split("GRANT SELECT")[0];
         new ResourceDatabasePopulator(new ByteArrayResource(sql.getBytes(StandardCharsets.UTF_8))).execute(source);
         var generator=java.security.KeyPairGenerator.getInstance("RSA");generator.initialize(3072);var keys=generator.generateKeyPair();
         Path directory=Files.createTempDirectory(Path.of("build"),"epoch-test-keys-");

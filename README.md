@@ -283,3 +283,39 @@ route; Gateway never exposes it publicly. Domain owns role/grant decisions.
 Local signup still does not verify mailbox ownership and therefore cannot claim
 pending privileged invitations. Cognito remains the cloud identity provider;
 this service is not required in the AWS runtime topology.
+
+## DLV-961 test-account maintenance (not activated)
+
+The optional internal Identity maintenance API manages `learner01`–`learner27`,
+`coauthor01`–`coauthor02` and `admin01`–`admin06`. The existing author is outside
+this roster and is never seeded, adopted or password-rotated by these endpoints.
+V5 adds an explicit test-account registry without modifying existing account data.
+Seeding adopts matching stable fixture IDs and creates only missing accounts;
+existing passwords, profiles and enabled states are preserved. Conflicting IDs
+abort the transaction. Domain grants, purchases and study plans are separate work.
+
+Both POST endpoints are disabled by default:
+
+- `/internal/v1/test-accounts/seed`: returns account IDs, usernames and whether each
+  identity was created.
+- `/internal/v1/test-accounts/passwords`: returns only `{ "updated": N }`, rotates
+  registered targets and invalidates their credential epochs and sessions.
+
+Each body contains `learnerPassword` and `staffPassword`; supply these only from
+Infra secret files. The dedicated Basic username is `lookahead-test-account-operator`.
+Its secret is `app.test-accounts.operator-secret` (at least 32 characters, distinct
+from the Gateway client and token-verifier secrets). Enabling additionally requires
+`app.test-accounts.enabled=true`, deployment environment `local`, and the
+`accounts`/`local-test` profiles. DEV and production profiles fail closed. Do not
+route these internal endpoints through the browser Gateway. DEV provider-backed
+provisioning is not implemented or activated by this local Identity mechanism.
+
+Username lookup also accepts a registered profile email, or the reserved
+`username@lookahead.test` alias of an explicitly registered test fixture. Ambiguous
+matches fail closed; adopting an old fixture does not replace its profile email.
+
+The Infra task branch contains `scripts/test_accounts_password.py`. Its receipt
+contains only the update count, and its managed staff group has eight accounts;
+the existing author's credential remains independent. No deployment or startup
+integration is claimed yet. DLV-961 still owns orchestration, reset, UI integration,
+Domain state and final cross-service documentation/verification.
