@@ -319,3 +319,7 @@ contains only the update count, and its managed staff group has eight accounts;
 the existing author's credential remains independent. No deployment or startup
 integration is claimed yet. DLV-961 still owns orchestration, reset, UI integration,
 Domain state and final cross-service documentation/verification.
+
+## People account directory
+
+Private `GET /internal/v1/accounts?query=&page=0` lists enabled accounts in stable pages of 50 for the Domain verifier credential only. Literal case-insensitive username/display-name/email search; page 0–100000, query up to 254 characters. No password fields, no writes, no-store responses. This route is never exposed through Gateway.

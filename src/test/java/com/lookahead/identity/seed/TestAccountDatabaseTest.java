@@ -84,4 +84,18 @@ class TestAccountDatabaseTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts WHERE password_hash='synthetic-test-hash:rotated-synthetic-learners'",Integer.class)).isEqualTo(27);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts WHERE password_hash='synthetic-test-hash:rotated-synthetic-staff'",Integer.class)).isEqualTo(8);
     }
+    @Test void directoryIncludesRealUnassignedAccountsAndSearchesLiteralText() {
+        var directory=new com.lookahead.identity.verification.AccountDirectoryController(jdbc);
+        for(int i=0;i<52;i++) jdbc.update("INSERT INTO accounts VALUES (?,?,?, ?,true,0,0,NULL)",UUID.randomUUID(),String.format("real%02d",i),"Real Learner","synthetic-hash");
+        UUID special=UUID.randomUUID();
+        jdbc.update("INSERT INTO accounts VALUES (?,?,?, ?,true,0,0,NULL)",special,"literal_%","Literal","synthetic-hash");
+        jdbc.update("INSERT INTO accounts VALUES (?,?,?, ?,false,0,0,NULL)",UUID.randomUUID(),"disabled","Hidden","synthetic-hash");
+        var first=(com.lookahead.identity.verification.AccountDirectoryController.Page)directory.list("",0).getBody();
+        var second=(com.lookahead.identity.verification.AccountDirectoryController.Page)directory.list("",1).getBody();
+        assertThat(first.accounts()).hasSize(50);assertThat(first.hasNext()).isTrue();
+        assertThat(second.accounts()).hasSize(3);assertThat(second.hasNext()).isFalse();
+        assertThat(first.accounts()).doesNotContainAnyElementsOf(second.accounts());
+        var match=(com.lookahead.identity.verification.AccountDirectoryController.Page)directory.list("_%",0).getBody();
+        assertThat(match.accounts()).extracting(com.lookahead.identity.verification.AccountDirectoryController.Account::accountId).containsExactly(special);
+    }
 }
