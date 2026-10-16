@@ -53,7 +53,7 @@ public class TestAccountSecurity {
                 .authorizeHttpRequests(auth -> auth.requestMatchers(HttpMethod.POST,
                         "/internal/v1/test-accounts/seed", "/internal/v1/test-accounts/passwords",
                         "/internal/v1/test-accounts/provision", "/internal/v1/test-accounts/activate",
-                        "/internal/v1/test-accounts/disable")
+                        "/internal/v1/test-accounts/disable", "/internal/v1/test-accounts/disable-real")
                         .hasRole("TEST_ACCOUNT_OPERATOR").anyRequest().denyAll())
                 .httpBasic(basic -> basic.authenticationEntryPoint((request, response, failure) -> {
                     response.setStatus(401); response.setHeader("Cache-Control", "no-store");

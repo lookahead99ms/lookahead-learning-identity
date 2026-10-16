@@ -39,8 +39,9 @@ class TestAccountHttpTest {
                 .header("Content-Type", "application/json").header("Cookie", "JSESSIONID=forged");
         if(credentials!=null)builder.header("Authorization", "Basic "+Base64.getEncoder()
                 .encodeToString(credentials.getBytes(StandardCharsets.UTF_8)));
-        builder.method(method,HttpRequest.BodyPublishers.ofString(
-                "{\"learnerPassword\":\"synthetic-learner-only\",\"staffPassword\":\"synthetic-staff-only\"}"));
+        builder.method(method,HttpRequest.BodyPublishers.ofString(path.equals("disable-real")
+                ? "{\"accountId\":\"00000000-0000-0000-0000-000000000001\"}"
+                : "{\"learnerPassword\":\"synthetic-learner-only\",\"staffPassword\":\"synthetic-staff-only\"}"));
         return HttpClient.newHttpClient().send(builder.build(),HttpResponse.BodyHandlers.ofString());
     }
     private static final String OPERATOR="lookahead-test-account-operator:synthetic-test-account-operator-credential-only";
@@ -68,7 +69,7 @@ class TestAccountHttpTest {
                 .doesNotContain("private-one","private-two");
     }
     @Test void creationAndDeletionEndpointsRequireTheOperatorAndDoNotExposePasswords() throws Exception {
-        for (String operation : List.of("provision", "activate", "disable")) {
+        for (String operation : List.of("provision", "activate", "disable", "disable-real")) {
             assertThat(send("POST",operation,null).statusCode()).isEqualTo(401);
             var success=send("POST",operation,OPERATOR);
             assertThat(success.statusCode()).isEqualTo(200);

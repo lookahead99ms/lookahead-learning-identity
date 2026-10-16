@@ -132,9 +132,13 @@ class TestAccountServiceTest {
         verify(jdbc).update(contains("creation_state='deleted'"), eq(accountId), eq(username));
         assertThatThrownBy(() -> service.activate(accountId, username)).hasMessageContaining("unavailable");
     }
-    @Test void disableRejectsStaffButPermitsAnExplicitFixedLearner() {
+    @Test void disablePermitsAnExplicitStaffAccountAndLearnerButRejectsUnmanagedIdentity() {
         var staff=TestAccountRoster.entries().stream().filter(TestAccountRoster.Entry::staff).findFirst().orElseThrow();
-        assertThatThrownBy(() -> service.disable(staff.accountId(),staff.username())).hasMessageContaining("Invalid managed test account");
+        assertThatThrownBy(() -> service.disable(UUID.randomUUID(),staff.username())).hasMessageContaining("Invalid managed test account");
+        when(jdbc.queryForList(contains("creation_state IN ('pending','active','deleted')"), eq(UUID.class),
+                eq(staff.accountId()), eq(staff.username()))).thenReturn(List.of(staff.accountId()));
+        service.disable(staff.accountId(),staff.username());
+        verify(jdbc).update(contains("creation_state='deleted'"),eq(staff.accountId()),eq(staff.username()));
         var learner=TestAccountRoster.entries().stream().filter(entry -> !entry.staff()).findFirst().orElseThrow();
         when(jdbc.queryForList(contains("creation_state IN ('pending','active','deleted')"), eq(UUID.class),
                 eq(learner.accountId()), eq(learner.username()))).thenReturn(List.of(learner.accountId()));

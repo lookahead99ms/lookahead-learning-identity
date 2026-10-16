@@ -41,4 +41,11 @@ public class AccountDirectoryController {
         if(rows.size()!=1)return ResponseEntity.status(404).header("Cache-Control","no-store").build();
         return ResponseEntity.ok().header("Cache-Control","no-store").body(rows.getFirst());
     }
+    @GetMapping("/internal/v1/accounts/{id}")
+    public ResponseEntity<?> byId(@PathVariable UUID id) {
+        var rows=jdbc.query("SELECT a.id,a.username,a.display_name,p.email FROM accounts a LEFT JOIN account_profiles p ON p.account_id=a.id WHERE a.id=? AND a.enabled",
+            (r,i)->new Account(r.getObject(1,UUID.class),r.getString(2),r.getString(3),r.getString(4)),id);
+        if(rows.isEmpty())return ResponseEntity.status(404).header("Cache-Control","no-store").build();
+        return ResponseEntity.ok().header("Cache-Control","no-store").body(rows.getFirst());
+    }
 }

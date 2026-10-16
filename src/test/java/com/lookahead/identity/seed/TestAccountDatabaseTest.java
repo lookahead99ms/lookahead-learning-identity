@@ -84,6 +84,18 @@ class TestAccountDatabaseTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts WHERE password_hash='synthetic-test-hash:rotated-synthetic-learners'",Integer.class)).isEqualTo(27);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts WHERE password_hash='synthetic-test-hash:rotated-synthetic-staff'",Integer.class)).isEqualTo(8);
     }
+    @Test void deletedStaffCannotSignInOrRegainCredentialsAfterSeedAndRotation() {
+        seed();
+        var staff=TestAccountRoster.entries().stream().filter(TestAccountRoster.Entry::staff).findFirst().orElseThrow();
+        transaction.executeWithoutResult(status -> service.disable(staff.accountId(),staff.username()));
+        assertThat(jdbc.queryForObject("SELECT enabled FROM accounts WHERE id=?",Boolean.class,staff.accountId())).isFalse();
+        assertThat(jdbc.queryForObject("SELECT password_hash FROM accounts WHERE id=?",String.class,staff.accountId())).isEqualTo("deleted");
+        seed();
+        int rotated=transaction.execute(status -> service.rotate("rotated-synthetic-learners","rotated-synthetic-staff"));
+        assertThat(rotated).isEqualTo(34);
+        assertThat(jdbc.queryForObject("SELECT password_hash FROM accounts WHERE id=?",String.class,staff.accountId())).isEqualTo("deleted");
+        assertThat(jdbc.queryForObject("SELECT creation_state FROM test_accounts WHERE account_id=?",String.class,staff.accountId())).isEqualTo("deleted");
+    }
     @Test void createdIdentityRemainsDisabledUntilActivationAndDeletionRevokesIt() {
         UUID id=UUID.randomUUID();String username="test-0123456789abcdef01234567";
         transaction.execute(status -> service.provision(id,username,"synthetic-learner-fixture-only"));
@@ -111,6 +123,22 @@ class TestAccountDatabaseTest {
         assertThat(jdbc.queryForObject("SELECT credential_epoch FROM accounts WHERE id=?",Integer.class,id)).isEqualTo(1);
         transaction.executeWithoutResult(status -> service.disable(id,username));
         assertThat(jdbc.queryForObject("SELECT credential_epoch FROM accounts WHERE id=?",Integer.class,id)).isEqualTo(1);
+    }
+    @Test void realLearnerDeletionRevokesLoginAndScrubsProfileButProtectsAuthorAndRoster() {
+        UUID real=UUID.randomUUID();
+        jdbc.update("INSERT INTO accounts VALUES (?,?,?, ?,true,0,0,NULL)",real,"real-learner","Real Learner","synthetic-hash");
+        jdbc.update("INSERT INTO account_profiles(account_id,first_name,last_name,email,country_code) VALUES (?,'Real','Learner','real@example.test','US')",real);
+        transaction.executeWithoutResult(status -> service.disableReal(real));
+        assertThat(jdbc.queryForObject("SELECT enabled FROM accounts WHERE id=?",Boolean.class,real)).isFalse();
+        assertThat(jdbc.queryForObject("SELECT username FROM accounts WHERE id=?",String.class,real)).startsWith("deleted-");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM account_profiles WHERE account_id=?",Integer.class,real)).isZero();
+        transaction.executeWithoutResult(status -> service.disableReal(real));
+        assertThat(jdbc.queryForObject("SELECT credential_epoch FROM accounts WHERE id=?",Integer.class,real)).isEqualTo(1);
+        UUID author=UUID.randomUUID();
+        jdbc.update("INSERT INTO accounts VALUES (?,?,?, ?,true,0,0,NULL)",author,"author@lookahead.test","Author","synthetic-hash");
+        assertThatThrownBy(()->transaction.executeWithoutResult(status -> service.disableReal(author))).hasMessageContaining("cannot be deleted");
+        var roster=TestAccountRoster.entries().getFirst();seed();
+        assertThatThrownBy(()->transaction.executeWithoutResult(status -> service.disableReal(roster.accountId()))).hasMessageContaining("cannot be deleted");
     }
     @Test void directoryIncludesRealUnassignedAccountsAndSearchesLiteralText() {
         var directory=new com.lookahead.identity.verification.AccountDirectoryController(jdbc);

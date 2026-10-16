@@ -22,4 +22,12 @@ class AccountDirectoryTest {
   verifyNoInteractions(jdbc);
   assertThat(((AccountDirectoryController.Page)controller.list("",0).getBody()).hasNext()).isFalse();
  }
+ @Test void byIdReturnsOnlyAnEnabledExactAccount() {
+  var jdbc=mock(JdbcTemplate.class);var controller=new AccountDirectoryController(jdbc);UUID id=UUID.randomUUID();
+  assertThat(controller.byId(id).getStatusCode().value()).isEqualTo(404);
+  var account=new AccountDirectoryController.Account(id,"real-user","Real User",null);
+  when(jdbc.query(anyString(),any(RowMapper.class),eq(id))).thenReturn(List.of(account));
+  assertThat(controller.byId(id).getBody()).isEqualTo(account);
+  assertThat(controller.byId(id).getHeaders().getCacheControl()).isEqualTo("no-store");
+ }
 }

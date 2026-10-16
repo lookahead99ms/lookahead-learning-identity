@@ -90,18 +90,39 @@ public class TestAccountService {
                 accountId, username);
     }
 
-    /** Revoke every sign-in path before Domain removes the learner's data. Retry safe. */
+    /** Revoke every sign-in path before Domain removes the managed account's data. Retry safe. */
     @Transactional
     public void disable(UUID accountId, String username) {
         policy.requireEnabled();
-        if (accountId == null || username == null || !deletableLearner(accountId, username))
+        if (accountId == null || username == null || !deletableManagedAccount(accountId, username))
             throw new AccountFailure(422, "INVALID_TEST_ACCOUNT", "Invalid managed test account identity.");
         jdbc.execute("LOCK TABLE test_accounts IN SHARE ROW EXCLUSIVE MODE");
         var registered = jdbc.queryForList("SELECT account_id FROM test_accounts WHERE account_id=? AND username=? AND creation_state IN ('pending','active','deleted')",
                 UUID.class, accountId, username);
         if (registered.isEmpty()) throw new AccountFailure(404, "TEST_ACCOUNT_NOT_FOUND", "Managed test account not found.");
-        jdbc.update("UPDATE accounts SET enabled=false,credential_epoch=credential_epoch+1,password_hash='deleted',display_name='Deleted test learner' WHERE id=? AND username=? AND password_hash<>'deleted'",
+        jdbc.update("UPDATE accounts SET enabled=false,credential_epoch=credential_epoch+1,password_hash='deleted',display_name='Deleted test account' WHERE id=? AND username=? AND password_hash<>'deleted'",
                 accountId, username);
+        clearSessionsAndProfile(accountId);
+        jdbc.update("UPDATE test_accounts SET creation_state='deleted',last_changed_by='managed-deletion',last_changed_at=clock_timestamp() WHERE account_id=? AND username=?",
+                accountId, username);
+    }
+
+    /** Local operator deletion of a real learner after Domain has checked owner and free status. */
+    @Transactional
+    public void disableReal(UUID accountId) {
+        policy.requireEnabled();
+        if (accountId == null) throw new AccountFailure(422, "INVALID_ACCOUNT", "Account ID is required.");
+        var names=jdbc.queryForList("SELECT username FROM accounts WHERE id=? FOR UPDATE",String.class,accountId);
+        if (names.isEmpty()) throw new AccountFailure(404, "ACCOUNT_NOT_FOUND", "Account not found.");
+        if ("author@lookahead.test".equals(names.getFirst()) || !jdbc.queryForList(
+                "SELECT account_id FROM test_accounts WHERE account_id=?",UUID.class,accountId).isEmpty())
+            throw new AccountFailure(403, "ACCOUNT_PROTECTED", "The author and managed test accounts cannot be deleted here.");
+        jdbc.update("UPDATE accounts SET enabled=false,credential_epoch=credential_epoch+1,password_hash='deleted',display_name='Deleted account',username=? WHERE id=? AND password_hash<>'deleted'",
+                "deleted-"+accountId.toString().replace("-",""),accountId);
+        clearSessionsAndProfile(accountId);
+    }
+
+    private void clearSessionsAndProfile(UUID accountId) {
         jdbc.update("DELETE FROM oauth2_authorization WHERE principal_name=?", accountId.toString());
         jdbc.update("DELETE FROM oauth2_authorization_consent WHERE principal_name=?", accountId.toString());
         jdbc.update("DELETE FROM sign_in_challenges WHERE account_id=?", accountId);
@@ -109,13 +130,11 @@ public class TestAccountService {
         jdbc.update("DELETE FROM account_profile_links WHERE account_id=?", accountId);
         jdbc.update("DELETE FROM account_preferences WHERE account_id=?", accountId);
         jdbc.update("DELETE FROM account_profiles WHERE account_id=?", accountId);
-        jdbc.update("UPDATE test_accounts SET creation_state='deleted',last_changed_by='managed-deletion',last_changed_at=clock_timestamp() WHERE account_id=? AND username=?",
-                accountId, username);
     }
 
-    private static boolean deletableLearner(UUID accountId, String username) {
+    private static boolean deletableManagedAccount(UUID accountId, String username) {
         return username.matches("test-[a-f0-9]{24}") || TestAccountRoster.entries().stream()
-                .anyMatch(entry -> !entry.staff() && entry.accountId().equals(accountId) && entry.username().equals(username));
+                .anyMatch(entry -> entry.accountId().equals(accountId) && entry.username().equals(username));
     }
 
     @Transactional
@@ -126,7 +145,7 @@ public class TestAccountService {
         jdbc.execute("LOCK TABLE test_accounts IN SHARE ROW EXCLUSIVE MODE");
         int updated = 0;
         for (var entry : TestAccountRoster.entries()) {
-            var registered = jdbc.queryForList("SELECT account_id FROM test_accounts WHERE account_id=? AND username=?",
+            var registered = jdbc.queryForList("SELECT account_id FROM test_accounts WHERE account_id=? AND username=? AND creation_state='active'",
                     UUID.class, entry.accountId(), entry.username());
             if (registered.isEmpty()) continue;
             int count = jdbc.update("UPDATE accounts SET password_hash=?,credential_epoch=credential_epoch+1,password_failure_count=0,password_failure_window=NULL WHERE id=? AND username=?",

@@ -307,7 +307,9 @@ the learner, and `disable` immediately blocks login, advances the credential
 epoch, scrubs the password hash even if activation never completed, and erases
 authorizations, sign-ins, profile, preferences and links. A registry tombstone
 survives deletion. The generated learner name is `test-` plus 24 hexadecimal
-characters; staff identities cannot pass the disable contract. These are
+characters; managed roster staff identities can be disabled after Domain
+authorizes the current role hierarchy. A disabled roster identity stays
+disabled across seed and password rotation. These are
 active on the working Local stack behind 4301 as of 2026-10-16. Stable4300
 remains separate.
 
@@ -333,3 +335,9 @@ Domain state and final cross-service documentation/verification.
 ## People account directory
 
 Private `GET /internal/v1/accounts?query=&page=0` lists enabled accounts in stable pages of 50 for the Domain verifier credential only. Literal case-insensitive username/display-name/email search; page 0–100000, query up to 254 characters. No password fields, no writes, no-store responses. This route is never exposed through Gateway.
+Exact `GET /internal/v1/accounts/{id}` uses the same verifier credential and
+returns only an enabled account for Domain maintenance. The separate Local
+operator `POST /internal/v1/test-accounts/disable-real` accepts an account ID
+after Domain has checked owner authority and free learner state; it rejects the
+author and managed test accounts, disables sign-in, removes credentials and
+profile data, and revokes sessions. This does not disable a DEV provider account.

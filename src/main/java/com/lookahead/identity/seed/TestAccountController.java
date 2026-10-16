@@ -37,4 +37,9 @@ public class TestAccountController {
         service.disable(request.accountId(), request.username());
         return Map.of("disabled", true);
     }
+    public record RealAccountRef(UUID accountId) {}
+    @PostMapping("/disable-real") public Object disableReal(@RequestBody RealAccountRef request) {
+        service.disableReal(request.accountId());
+        return Map.of("disabled", true);
+    }
 }
