@@ -4,10 +4,10 @@
     {
       "ruleId": "java/spring-disabled-csrf-protection",
       "file": "src/main/java/com/lookahead/identity/verification/TokenVerificationSecurity.java",
-      "sourceSha256": "f8cea4d821eab38732efc44eacdd03e20e9c8db116157e40a6e8a189e462bb56",
+      "sourceSha256": "0c525dae792a322df0dbb0f06643aca7a69bbeb5f61ae398358ca0e11337b2cc",
       "expiresAt": "2026-10-19",
       "ticket": "DLV-804",
-      "rationale": "This stateless internal token-verification chain accepts only service HTTP Basic credentials, never browser cookies; CSRF does not protect credentialed non-browser clients. Re-reviewed 2026-10-12: The new internal account lookup uses the same stateless service verifier credentials and POST-only role check. Browser cookies alone and incorrect credentials remain denied. Fresh hosted CodeQL analysis remains required."
+      "rationale": "This stateless internal verifier chain accepts only dedicated service HTTP Basic credentials, never browser cookies. The 2026-10-16 review covers POST token verification and account lookup plus GET-only internal account directory routes; every route requires the verifier role and all other methods are denied. CSRF does not protect these non-browser, non-cookie calls. Cookie-only and incorrect credentials remain denied by integration tests. Fresh hosted CodeQL analysis remains required."
     }
   ]
 }
