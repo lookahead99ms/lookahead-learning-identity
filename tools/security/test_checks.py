@@ -1,5 +1,5 @@
 import copy
-from datetime import date
+from datetime import date, timedelta
 import importlib.util
 from pathlib import Path
 import unittest
@@ -47,7 +47,49 @@ class SecurityGateTests(unittest.TestCase):
             'src/main/java/com/lookahead/identity/verification/TokenVerificationSecurity.java'),
             ('java/spring-disabled-csrf-protection',
             'src/main/java/com/lookahead/identity/seed/TestAccountSecurity.java')}, set(exceptions))
-        self.assertEqual({'2026-10-19'}, {item['expiresAt'] for item in exceptions.values()})
+        self.assertEqual({'2026-11-13'}, {item['expiresAt'] for item in exceptions.values()})
+
+    def test_reviewed_repository_exceptions_expire_individually_and_reject_source_drift(self):
+        document = checks.read(checks.SAST_EXCEPTIONS)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            policy = root / 'exceptions.json'
+            for item in document['exceptions']:
+                with self.subTest(file=item['file']):
+                    source = root / item['file']
+                    source.parent.mkdir(parents=True, exist_ok=True)
+                    reviewed = (checks.ROOT / item['file']).read_bytes()
+                    source.write_bytes(reviewed)
+                    policy.write_text(checks.json.dumps({'version': 1, 'exceptions': [item]}))
+                    expiry = date.fromisoformat(item['expiresAt'])
+                    self.assertEqual(1, len(checks.load_sast_exceptions(policy, root, expiry)))
+                    with self.assertRaisesRegex(ValueError, '^Expired SAST exception$'):
+                        checks.load_sast_exceptions(policy, root, expiry + timedelta(days=1))
+                    source.write_bytes(reviewed + b'\n// source drift fixture\n')
+                    with self.assertRaisesRegex(ValueError, '^SAST exception source changed or is missing$'):
+                        checks.load_sast_exceptions(policy, root, expiry)
+
+    def test_sast_review_contract_rejects_malformed_and_duplicate_records(self):
+        document = checks.read(checks.SAST_EXCEPTIONS)
+        item = document['exceptions'][0]
+        today = date.fromisoformat(item['expiresAt'])
+        malformed = [
+            {'version': 2, 'exceptions': [item]},
+            {'version': 1, 'exceptions': {}},
+            {'version': 1, 'exceptions': [{**item, 'rationale': ''}]},
+            {'version': 1, 'exceptions': [{**item, 'file': '../Security.java'}]},
+            {'version': 1, 'exceptions': [{**item, 'file': '/Security.java'}]},
+            {'version': 1, 'exceptions': [{**item, 'expiresAt': 'invalid'}]},
+            {'version': 1, 'exceptions': [item, item]},
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            policy = Path(directory) / 'exceptions.json'
+            self.assertEqual({}, checks.load_sast_exceptions(policy, checks.ROOT, today))
+            for candidate in malformed:
+                with self.subTest(document=candidate):
+                    policy.write_text(checks.json.dumps(candidate))
+                    with self.assertRaises(ValueError):
+                        checks.load_sast_exceptions(policy, checks.ROOT, today)
 
     def test_trace_notifications_are_informational_but_warnings_still_block(self):
         run = {'tool': {'driver': {'name': 'CodeQL', 'rules': [{'id': 'fixture'}]}},

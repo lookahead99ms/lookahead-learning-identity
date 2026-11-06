@@ -91,3 +91,26 @@ no `Set-Cookie`; successful operator requests also create no cookie. A second
 exception is bound to this exact rule and file digest, with the same October 19
 expiry and DLV-804 owner. It does not suppress another rule or file. A new hosted
 CodeQL run is required before accepting the PR.
+
+## November 6 review renewal
+
+PR #31 failed the repository-binding test because both October 19 exceptions
+expired. Both complete security-chain sources were reviewed again and match
+their existing SHA-256 digests. The verifier still requires its dedicated service
+credential and role; the operator chain additionally requires the Local-only
+policy and its separate secret. Both are stateless, deny unlisted methods and
+do not accept browser cookies as authorization. The operator credential must
+remain confined to trusted maintenance clients, never used for browser sign-in.
+
+The exact rule, file, digest and DLV-804 ownership remain unchanged. The bounded
+renewal expires after November 13, 2026 (the loader accepts the expiry date and
+rejects the next day). Regression tests exercise both actual records separately
+at that boundary and reject source drift. Negative SARIF notification output
+is expected fixture output, not the cause of this failure. The focused HTTP
+security tests supplement the source review; fresh hosted full CodeQL analysis
+must still exercise both exceptions. No application behavior or deployment
+changes are included. Reverting the renewal restores the expired gate.
+
+Local validation: 24 Python security-tooling tests and 9 focused Java HTTP/policy
+tests passed. The exception loader has 28/28 lines covered (100%); this is targeted
+loader coverage, not a new whole-application coverage claim.
