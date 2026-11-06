@@ -114,3 +114,32 @@ changes are included. Reverting the renewal restores the expired gate.
 Local validation: 24 Python security-tooling tests and 9 focused Java HTTP/policy
 tests passed. The exception loader has 28/28 lines covered (100%); this is targeted
 loader coverage, not a new whole-application coverage claim.
+
+## November 6 base-image remediation (PR31)
+
+The image gate found three HIGH package findings in the old Noble builder and
+nine blocking findings in the old Alpine runtime/final image. A fresh scan of
+the current Noble builder still found CVE-2026-109518 in `apt` and
+`libapt-pkg6.0t64`; updating only that tag would leave the base-image gate red.
+The build therefore uses the official digest-pinned Java 21 Alpine JDK, paired
+with the current Java 21 Alpine JRE. Both declare Temurin 21.0.13+9.
+
+The base parser now permits the tested Alpine JDK while retaining exact Temurin
+Java 21 JDK/JRE ordering and digest requirements. Unknown variants, floating
+tags, reversed stages and other repositories remain rejected. The image gate
+continues to scan both original bases and the built application, including
+unfixed HIGH/CRITICAL findings; there are no image exceptions or severity changes.
+
+Rebuild the image to obtain the corrected layers. Existing running images are
+unaffected until an explicitly requested deployment. Reverting these digest and
+parser changes restores the previous package findings. No endpoints, credentials,
+application schema or AWS resources change.
+
+Validation: Linux AMD64 Docker build and tests passed, followed by pinned Trivy
+0.74.0 scans of both exact bases and the final image with zero blocking findings.
+An isolated read-only container executes Java 21.0.13 as UID 10001 and the packaged
+healthcheck fails closed when no service is available. This is a packaging smoke,
+not an integrated authentication or deployment claim. Separately, all 222 Java
+tests passed with disposable PostgreSQL and 88.59% application line coverage.
+All 25 tooling tests passed; the base-image parser has 6/6 lines covered (100%).
+The configuration scan also passed. Hosted CI remains unverified after push.

@@ -80,6 +80,11 @@ Long-form aliases and contradictory environment profiles are rejected. Local fix
 local author identity retains its existing stable subject but receives no grants
 in this application.
 
+The standalone Docker build uses digest-pinned Temurin Java 21 Alpine JDK and
+JRE stages. The November 6 refresh replaces vulnerable base packages; the
+security gate scans both bases and the final image. Rebuild to apply it to a new
+image; running containers are unchanged. See [Security CI](docs/security-ci.md).
+
 ## Configuration contract
 
 | Property / environment | Meaning |

@@ -227,12 +227,21 @@ class SecurityGateTests(unittest.TestCase):
             with self.assertRaises(ValueError):checks.review_history([{**finding,'StartLine':8}],policy)
             with self.assertRaises(ValueError):checks.review_history([],policy)
 
+    def test_repository_bases_use_reviewed_java21_alpine_pair(self):
+        images = checks.base_images((checks.ROOT / 'Dockerfile').read_text())
+        self.assertTrue(images[0].startswith('eclipse-temurin:21-jdk-alpine@sha256:'))
+        self.assertTrue(images[1].startswith('eclipse-temurin:21-jre-alpine@sha256:'))
+        for oldDigest in ('b468c3fc688b14450571494f588bd939378e7fd542ed5a73f8efc13f17872a87',
+                          '51ab5e3302e7141ce665ca3ea85e8b5cd648eafbc3c0c90dd79d6537684e4555'):
+            self.assertNotIn(oldDigest, ' '.join(images))
+
     def test_both_base_stages_must_be_pinned(self):
         valid='FROM eclipse-temurin:21-jdk@sha256:'+64*'a'+' AS build\nFROM eclipse-temurin:21-jre@sha256:'+64*'b'+' AS runtime'
         self.assertEqual(2,len(checks.base_images(valid)))
         self.assertEqual(2,len(checks.base_images(valid.replace("21-jdk@", "21-jdk-noble@").replace("21-jre@", "21-jre-noble@"))))
         self.assertEqual(2,len(checks.base_images(valid.replace("21-jdk@", "21-jdk-noble@").replace("21-jre@", "21-jre-alpine@"))))
-        for bad in [valid.replace("21-jdk@", "21-jdk-unknown@"), valid.replace("21-jdk@", "21-jdk-alpine@"), valid.replace("21-jre@", "21-jre-unknown@"), "\n".join(reversed(valid.splitlines()))]:
+        self.assertEqual(2, len(checks.base_images(valid.replace("21-jdk@", "21-jdk-alpine@").replace("21-jre@", "21-jre-alpine@"))))
+        for bad in [valid.replace("21-jdk@", "21-jdk-unknown@"), valid.replace("21-jre@", "21-jre-unknown@"), "\n".join(reversed(valid.splitlines()))]:
             with self.assertRaises(ValueError):checks.base_images(bad)
         for bad in ['FROM eclipse-temurin:21-jre', valid.splitlines()[0], valid.replace('21-jdk@sha256:'+64*'a','21-jdk'), valid.replace('21-jre@sha256:'+64*'b','21-jre-alpine'), valid.replace('eclipse-temurin:21-jre@','untrusted/java:21-jre@')]:
             with self.assertRaises(ValueError):checks.base_images(bad)
