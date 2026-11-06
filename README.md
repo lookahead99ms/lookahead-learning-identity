@@ -80,6 +80,11 @@ Long-form aliases and contradictory environment profiles are rejected. Local fix
 local author identity retains its existing stable subject but receives no grants
 in this application.
 
+The standalone Docker build uses digest-pinned Temurin Java 21 Alpine JDK and
+JRE stages. The November 6 refresh replaces vulnerable base packages; the
+security gate scans both bases and the final image. Rebuild to apply it to a new
+image; running containers are unchanged. See [Security CI](docs/security-ci.md).
+
 ## Configuration contract
 
 | Property / environment | Meaning |
@@ -307,14 +312,19 @@ the learner, and `disable` immediately blocks login, advances the credential
 epoch, scrubs the password hash even if activation never completed, and erases
 authorizations, sign-ins, profile, preferences and links. A registry tombstone
 survives deletion. The generated learner name is `test-` plus 24 hexadecimal
-characters; managed roster staff identities can be disabled after Domain
+characters; managed roster learner identities can be disabled after Domain
 authorizes the current role hierarchy. A disabled roster identity stays
 disabled across seed and password rotation. These are
 active on the working Local stack behind 4301 as of 2026-10-16. Stable4300
 remains separate.
 
-Each body contains `learnerPassword` and `staffPassword`; supply these only from
-Infra secret files. The dedicated Basic username is `lookahead-test-account-operator`.
+Each body contains only `learnerPassword`; supply it only from an Infra secret
+file. DLV-971 (owner decision 2026-11-06) limits the managed roster to the learner
+test accounts learner01–learner27: the staff test accounts coauthor01, coauthor02
+and admin01–admin06 and their separate staff password are gone, and migration
+`V7__learner_test_accounts_only.sql` disables any of them that an existing Local
+database still holds, exactly as `disable` does (login blocked, credential epoch
+advanced, hash scrubbed, sessions and profile erased, registry tombstone kept). The dedicated Basic username is `lookahead-test-account-operator`.
 Its secret is `app.test-accounts.operator-secret` (at least 32 characters, distinct
 from the Gateway client and token-verifier secrets). Enabling additionally requires
 `app.test-accounts.enabled=true`, deployment environment `local`, and the
@@ -327,7 +337,7 @@ Username lookup also accepts a registered profile email, or the reserved
 matches fail closed; adopting an old fixture does not replace its profile email.
 
 The Infra task branch contains `scripts/test_accounts_password.py`. Its receipt
-contains only the update count, and its managed staff group has eight accounts;
+contains only the update count across the 27 managed learner accounts;
 the existing author's credential remains independent. No deployment or startup
 integration is claimed yet. DLV-961 still owns orchestration, reset, UI integration,
 Domain state and final cross-service documentation/verification.

@@ -1,5 +1,5 @@
 import copy
-from datetime import date
+from datetime import date, timedelta
 import importlib.util
 from pathlib import Path
 import unittest
@@ -47,7 +47,49 @@ class SecurityGateTests(unittest.TestCase):
             'src/main/java/com/lookahead/identity/verification/TokenVerificationSecurity.java'),
             ('java/spring-disabled-csrf-protection',
             'src/main/java/com/lookahead/identity/seed/TestAccountSecurity.java')}, set(exceptions))
-        self.assertEqual({'2026-10-19'}, {item['expiresAt'] for item in exceptions.values()})
+        self.assertEqual({'2026-11-13'}, {item['expiresAt'] for item in exceptions.values()})
+
+    def test_reviewed_repository_exceptions_expire_individually_and_reject_source_drift(self):
+        document = checks.read(checks.SAST_EXCEPTIONS)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            policy = root / 'exceptions.json'
+            for item in document['exceptions']:
+                with self.subTest(file=item['file']):
+                    source = root / item['file']
+                    source.parent.mkdir(parents=True, exist_ok=True)
+                    reviewed = (checks.ROOT / item['file']).read_bytes()
+                    source.write_bytes(reviewed)
+                    policy.write_text(checks.json.dumps({'version': 1, 'exceptions': [item]}))
+                    expiry = date.fromisoformat(item['expiresAt'])
+                    self.assertEqual(1, len(checks.load_sast_exceptions(policy, root, expiry)))
+                    with self.assertRaisesRegex(ValueError, '^Expired SAST exception$'):
+                        checks.load_sast_exceptions(policy, root, expiry + timedelta(days=1))
+                    source.write_bytes(reviewed + b'\n// source drift fixture\n')
+                    with self.assertRaisesRegex(ValueError, '^SAST exception source changed or is missing$'):
+                        checks.load_sast_exceptions(policy, root, expiry)
+
+    def test_sast_review_contract_rejects_malformed_and_duplicate_records(self):
+        document = checks.read(checks.SAST_EXCEPTIONS)
+        item = document['exceptions'][0]
+        today = date.fromisoformat(item['expiresAt'])
+        malformed = [
+            {'version': 2, 'exceptions': [item]},
+            {'version': 1, 'exceptions': {}},
+            {'version': 1, 'exceptions': [{**item, 'rationale': ''}]},
+            {'version': 1, 'exceptions': [{**item, 'file': '../Security.java'}]},
+            {'version': 1, 'exceptions': [{**item, 'file': '/Security.java'}]},
+            {'version': 1, 'exceptions': [{**item, 'expiresAt': 'invalid'}]},
+            {'version': 1, 'exceptions': [item, item]},
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            policy = Path(directory) / 'exceptions.json'
+            self.assertEqual({}, checks.load_sast_exceptions(policy, checks.ROOT, today))
+            for candidate in malformed:
+                with self.subTest(document=candidate):
+                    policy.write_text(checks.json.dumps(candidate))
+                    with self.assertRaises(ValueError):
+                        checks.load_sast_exceptions(policy, checks.ROOT, today)
 
     def test_trace_notifications_are_informational_but_warnings_still_block(self):
         run = {'tool': {'driver': {'name': 'CodeQL', 'rules': [{'id': 'fixture'}]}},
@@ -185,12 +227,21 @@ class SecurityGateTests(unittest.TestCase):
             with self.assertRaises(ValueError):checks.review_history([{**finding,'StartLine':8}],policy)
             with self.assertRaises(ValueError):checks.review_history([],policy)
 
+    def test_repository_bases_use_reviewed_java21_alpine_pair(self):
+        images = checks.base_images((checks.ROOT / 'Dockerfile').read_text())
+        self.assertTrue(images[0].startswith('eclipse-temurin:21-jdk-alpine@sha256:'))
+        self.assertTrue(images[1].startswith('eclipse-temurin:21-jre-alpine@sha256:'))
+        for oldDigest in ('b468c3fc688b14450571494f588bd939378e7fd542ed5a73f8efc13f17872a87',
+                          '51ab5e3302e7141ce665ca3ea85e8b5cd648eafbc3c0c90dd79d6537684e4555'):
+            self.assertNotIn(oldDigest, ' '.join(images))
+
     def test_both_base_stages_must_be_pinned(self):
         valid='FROM eclipse-temurin:21-jdk@sha256:'+64*'a'+' AS build\nFROM eclipse-temurin:21-jre@sha256:'+64*'b'+' AS runtime'
         self.assertEqual(2,len(checks.base_images(valid)))
         self.assertEqual(2,len(checks.base_images(valid.replace("21-jdk@", "21-jdk-noble@").replace("21-jre@", "21-jre-noble@"))))
         self.assertEqual(2,len(checks.base_images(valid.replace("21-jdk@", "21-jdk-noble@").replace("21-jre@", "21-jre-alpine@"))))
-        for bad in [valid.replace("21-jdk@", "21-jdk-unknown@"), valid.replace("21-jdk@", "21-jdk-alpine@"), valid.replace("21-jre@", "21-jre-unknown@"), "\n".join(reversed(valid.splitlines()))]:
+        self.assertEqual(2, len(checks.base_images(valid.replace("21-jdk@", "21-jdk-alpine@").replace("21-jre@", "21-jre-alpine@"))))
+        for bad in [valid.replace("21-jdk@", "21-jdk-unknown@"), valid.replace("21-jre@", "21-jre-unknown@"), "\n".join(reversed(valid.splitlines()))]:
             with self.assertRaises(ValueError):checks.base_images(bad)
         for bad in ['FROM eclipse-temurin:21-jre', valid.splitlines()[0], valid.replace('21-jdk@sha256:'+64*'a','21-jdk'), valid.replace('21-jre@sha256:'+64*'b','21-jre-alpine'), valid.replace('eclipse-temurin:21-jre@','untrusted/java:21-jre@')]:
             with self.assertRaises(ValueError):checks.base_images(bad)

@@ -91,3 +91,55 @@ no `Set-Cookie`; successful operator requests also create no cookie. A second
 exception is bound to this exact rule and file digest, with the same October 19
 expiry and DLV-804 owner. It does not suppress another rule or file. A new hosted
 CodeQL run is required before accepting the PR.
+
+## November 6 review renewal
+
+PR #31 failed the repository-binding test because both October 19 exceptions
+expired. Both complete security-chain sources were reviewed again and match
+their existing SHA-256 digests. The verifier still requires its dedicated service
+credential and role; the operator chain additionally requires the Local-only
+policy and its separate secret. Both are stateless, deny unlisted methods and
+do not accept browser cookies as authorization. The operator credential must
+remain confined to trusted maintenance clients, never used for browser sign-in.
+
+The exact rule, file, digest and DLV-804 ownership remain unchanged. The bounded
+renewal expires after November 13, 2026 (the loader accepts the expiry date and
+rejects the next day). Regression tests exercise both actual records separately
+at that boundary and reject source drift. Negative SARIF notification output
+is expected fixture output, not the cause of this failure. The focused HTTP
+security tests supplement the source review; fresh hosted full CodeQL analysis
+must still exercise both exceptions. No application behavior or deployment
+changes are included. Reverting the renewal restores the expired gate.
+
+Local validation: 24 Python security-tooling tests and 9 focused Java HTTP/policy
+tests passed. The exception loader has 28/28 lines covered (100%); this is targeted
+loader coverage, not a new whole-application coverage claim.
+
+## November 6 base-image remediation (PR31)
+
+The image gate found three HIGH package findings in the old Noble builder and
+nine blocking findings in the old Alpine runtime/final image. A fresh scan of
+the current Noble builder still found CVE-2026-109518 in `apt` and
+`libapt-pkg6.0t64`; updating only that tag would leave the base-image gate red.
+The build therefore uses the official digest-pinned Java 21 Alpine JDK, paired
+with the current Java 21 Alpine JRE. Both declare Temurin 21.0.13+9.
+
+The base parser now permits the tested Alpine JDK while retaining exact Temurin
+Java 21 JDK/JRE ordering and digest requirements. Unknown variants, floating
+tags, reversed stages and other repositories remain rejected. The image gate
+continues to scan both original bases and the built application, including
+unfixed HIGH/CRITICAL findings; there are no image exceptions or severity changes.
+
+Rebuild the image to obtain the corrected layers. Existing running images are
+unaffected until an explicitly requested deployment. Reverting these digest and
+parser changes restores the previous package findings. No endpoints, credentials,
+application schema or AWS resources change.
+
+Validation: Linux AMD64 Docker build and tests passed, followed by pinned Trivy
+0.74.0 scans of both exact bases and the final image with zero blocking findings.
+An isolated read-only container executes Java 21.0.13 as UID 10001 and the packaged
+healthcheck fails closed when no service is available. This is a packaging smoke,
+not an integrated authentication or deployment claim. Separately, all 222 Java
+tests passed with disposable PostgreSQL and 88.59% application line coverage.
+All 25 tooling tests passed; the base-image parser has 6/6 lines covered (100%).
+The configuration scan also passed. Hosted CI remains unverified after push.

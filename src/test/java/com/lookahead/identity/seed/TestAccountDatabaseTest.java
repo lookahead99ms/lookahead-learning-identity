@@ -13,7 +13,10 @@ import static org.assertj.core.api.Assertions.*;
 @EnabledIfEnvironmentVariable(named="DLV919_DATABASE_URL",matches=".+")
 class TestAccountDatabaseTest {
     JdbcTemplate jdbc; TransactionTemplate transaction; String schema; TestAccountService service;
-    @BeforeEach void setup() throws Exception {
+    static final List<String> STAFF_USERNAMES=List.of("coauthor01","coauthor02","admin01","admin02","admin03","admin04","admin05","admin06");
+    static final String BEFORE_V7="before-v7";
+    Path migrations;
+    @BeforeEach void setup(TestInfo info) throws Exception {
         String url=System.getenv("DLV919_DATABASE_URL");
         if(!url.matches("jdbc:postgresql://127\\.0\\.0\\.1:[0-9]+/postgres"))
             throw new IllegalStateException("Use the disposable session-registry fixture");
@@ -23,20 +26,25 @@ class TestAccountDatabaseTest {
         admin.execute("CREATE SCHEMA "+schema);
         var source=new DriverManagerDataSource(url+"?currentSchema="+schema,"postgres",password);
         jdbc=new JdbcTemplate(source); transaction=new TransactionTemplate(new DataSourceTransactionManager(source));
-        var migrations=Path.of("src/main/resources/db/identity");
+        migrations=Path.of("src/main/resources/db/identity");
         jdbc.execute(Files.readString(migrations.resolve("V1__identity.sql")).split("REVOKE ALL")[0]);
         for(String file:List.of("V2__credential_epoch.sql","V3__logical_sign_ins.sql",
                 "V4__account_preferences_and_links.sql","V5__test_account_registry.sql","V6__created_test_accounts.sql"))
             jdbc.execute(Files.readString(migrations.resolve(file)).split("GRANT SELECT")[0]);
+        // A test tagged before-v7 stages pre-DLV-971 rows first and applies V7 itself.
+        if(!info.getTags().contains(BEFORE_V7)) applyV7();
         PasswordEncoder encoder=new PasswordEncoder() {
             public String encode(CharSequence value) { return "synthetic-test-hash:"+value; }
             public boolean matches(CharSequence value,String encoded) { return encode(value).equals(encoded); }
         };
         service=new TestAccountService(jdbc,encoder,new TestAccountPolicy(TestAccountPolicyTest.local()));
     }
+    void applyV7() throws Exception {
+        jdbc.execute(Files.readString(migrations.resolve("V7__learner_test_accounts_only.sql")).split("GRANT SELECT")[0]);
+    }
     @AfterEach void cleanup() { if(jdbc!=null)jdbc.execute("DROP SCHEMA "+schema+" CASCADE"); }
     List<TestAccountService.Result> seed() {
-        return transaction.execute(status -> service.seed("synthetic-learner-only", "synthetic-staff-only"));
+        return transaction.execute(status -> service.seed("synthetic-learner-only"));
     }
     @Test void repeatedSeedPreservesExistingLearnersAndOwnerByteForByte() {
         UUID owner=UUID.randomUUID();
@@ -44,11 +52,12 @@ class TestAccountDatabaseTest {
         var first=TestAccountRoster.entries().getFirst();
         jdbc.update("INSERT INTO accounts VALUES (?,?,?, ?,true,7,0,NULL)",first.accountId(),first.username(),"Existing learner","untouched-learner-hash");
         var before=jdbc.queryForList("SELECT * FROM accounts ORDER BY username");
-        assertThat(seed().stream().filter(TestAccountService.Result::created)).hasSize(34);
+        assertThat(seed().stream().filter(TestAccountService.Result::created)).hasSize(26);
         assertThat(seed()).allMatch(r -> !r.created());
         var after=jdbc.queryForList("SELECT * FROM accounts WHERE id IN (?,?) ORDER BY username",owner,first.accountId());
         assertThat(after).isEqualTo(before);
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM test_accounts",Integer.class)).isEqualTo(35);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM test_accounts",Integer.class)).isEqualTo(27);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts WHERE username LIKE 'coauthor%' OR username LIKE 'admin%'",Integer.class)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM test_accounts WHERE account_id=?",Integer.class,owner)).isZero();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM account_profiles WHERE account_id=?",Integer.class,first.accountId())).isZero();
         var rosterBefore=jdbc.queryForList("SELECT * FROM test_accounts ORDER BY username");
@@ -77,24 +86,80 @@ class TestAccountDatabaseTest {
         UUID owner=UUID.randomUUID();
         jdbc.update("INSERT INTO accounts VALUES (?,?,?, ?,true,0,0,NULL)",owner,"author@lookahead.test","Existing owner","untouched-owner-hash");
         seed();
-        int updated=transaction.execute(status -> service.rotate("rotated-synthetic-learners", "rotated-synthetic-staff"));
-        assertThat(updated).isEqualTo(35);
+        int updated=transaction.execute(status -> service.rotate("rotated-synthetic-learners"));
+        assertThat(updated).isEqualTo(27);
         assertThat(jdbc.queryForObject("SELECT password_hash FROM accounts WHERE id=?",String.class,owner)).isEqualTo("untouched-owner-hash");
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts WHERE credential_epoch=1",Integer.class)).isEqualTo(35);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts WHERE credential_epoch=1",Integer.class)).isEqualTo(27);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts WHERE password_hash='synthetic-test-hash:rotated-synthetic-learners'",Integer.class)).isEqualTo(27);
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts WHERE password_hash='synthetic-test-hash:rotated-synthetic-staff'",Integer.class)).isEqualTo(8);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts",Integer.class)).isEqualTo(28);
     }
-    @Test void deletedStaffCannotSignInOrRegainCredentialsAfterSeedAndRotation() {
+    @Test void deletedLearnerCannotSignInOrRegainCredentialsAfterSeedAndRotation() {
         seed();
-        var staff=TestAccountRoster.entries().stream().filter(TestAccountRoster.Entry::staff).findFirst().orElseThrow();
-        transaction.executeWithoutResult(status -> service.disable(staff.accountId(),staff.username()));
-        assertThat(jdbc.queryForObject("SELECT enabled FROM accounts WHERE id=?",Boolean.class,staff.accountId())).isFalse();
-        assertThat(jdbc.queryForObject("SELECT password_hash FROM accounts WHERE id=?",String.class,staff.accountId())).isEqualTo("deleted");
+        var learner=TestAccountRoster.entries().get(12);
+        transaction.executeWithoutResult(status -> service.disable(learner.accountId(),learner.username()));
+        assertThat(jdbc.queryForObject("SELECT enabled FROM accounts WHERE id=?",Boolean.class,learner.accountId())).isFalse();
+        assertThat(jdbc.queryForObject("SELECT password_hash FROM accounts WHERE id=?",String.class,learner.accountId())).isEqualTo("deleted");
+        assertThat(seed()).allMatch(r -> !r.created());
+        int rotated=transaction.execute(status -> service.rotate("rotated-synthetic-learners"));
+        assertThat(rotated).isEqualTo(26);
+        assertThat(jdbc.queryForObject("SELECT enabled FROM accounts WHERE id=?",Boolean.class,learner.accountId())).isFalse();
+        assertThat(jdbc.queryForObject("SELECT password_hash FROM accounts WHERE id=?",String.class,learner.accountId())).isEqualTo("deleted");
+        assertThat(jdbc.queryForObject("SELECT creation_state FROM test_accounts WHERE account_id=?",String.class,learner.accountId())).isEqualTo("deleted");
+    }
+    @Tag(BEFORE_V7)
+    @Test void v7DisablesPreExistingStaffTestAccountsAndLeavesLearnersAndRealAccountsAlone() throws Exception {
+        // Stage a pre-DLV-971 database: eight registered staff fixtures with live sessions and profile data.
+        Map<String,UUID> staff=new LinkedHashMap<>();
+        for(String username:STAFF_USERNAMES){
+            UUID id=UUID.nameUUIDFromBytes(("lookahead-local-test:"+username).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            staff.put(username,id);
+            jdbc.update("INSERT INTO accounts VALUES (?,?,?, ?,true,3,2,now())",id,username,"Staff Test","synthetic-test-hash:old-staff");
+            jdbc.update("INSERT INTO account_profiles(account_id,first_name,last_name,email,country_code) VALUES (?,?,'Test',?,'US')",id,username,username+"@lookahead.test");
+            jdbc.update("INSERT INTO test_accounts(account_id,username,last_changed_by) VALUES (?,?,'test-account-seed')",id,username);
+            jdbc.update("INSERT INTO account_preferences(account_id,theme) VALUES (?,'dark')",id);
+            jdbc.update("INSERT INTO account_profile_links(account_id,kind,url) VALUES (?,'github','https://example.test/'||?)",id,username);
+            UUID signInId=UUID.randomUUID();
+            jdbc.update("INSERT INTO logical_sign_ins(id,account_id,credential_epoch,binding_digest,created_at,last_active_at,recent_auth_at) VALUES (?,?,3,'synthetic',now(),now(),now())",signInId,id);
+            jdbc.update("INSERT INTO sign_in_challenges(token_digest,account_id,credential_epoch,binding_digest,client_description,created_at,expires_at,admitted_id) VALUES (?,?,3,'synthetic','Browser',now(),now()+interval '1 hour',?)","challenge-"+username,id,signInId);
+            jdbc.update("INSERT INTO oauth2_authorization(id,registered_client_id,principal_name,authorization_grant_type,logical_sign_in_id) VALUES (?,'lookahead-web',?,'authorization_code',?)","authorization-"+username,id.toString(),signInId);
+            jdbc.update("INSERT INTO oauth2_authorization_consent(registered_client_id,principal_name,authorities) VALUES ('lookahead-web',?,'SCOPE_openid')",id.toString());
+        }
+        // A real account sharing a retired name but never registered, plus a seeded learner, must survive untouched.
+        UUID impostor=UUID.randomUUID();
+        jdbc.update("INSERT INTO accounts VALUES (?,?,?, ?,true,0,0,NULL)",impostor,"admin09","Real admin-like learner","real-hash");
+        jdbc.update("INSERT INTO account_profiles(account_id,first_name,last_name,email,country_code) VALUES (?,'Real','Person','admin09@example.test','US')",impostor);
         seed();
-        int rotated=transaction.execute(status -> service.rotate("rotated-synthetic-learners","rotated-synthetic-staff"));
-        assertThat(rotated).isEqualTo(34);
-        assertThat(jdbc.queryForObject("SELECT password_hash FROM accounts WHERE id=?",String.class,staff.accountId())).isEqualTo("deleted");
-        assertThat(jdbc.queryForObject("SELECT creation_state FROM test_accounts WHERE account_id=?",String.class,staff.accountId())).isEqualTo("deleted");
+        var learner=TestAccountRoster.entries().getFirst();
+        var learnerBefore=jdbc.queryForList("SELECT * FROM accounts WHERE id=?",learner.accountId());
+        var impostorBefore=jdbc.queryForList("SELECT * FROM accounts WHERE id=?",impostor);
+        applyV7();
+        for(var entry:staff.entrySet()){
+            UUID id=entry.getValue();
+            var row=jdbc.queryForMap("SELECT enabled,credential_epoch,password_hash,display_name,username FROM accounts WHERE id=?",id);
+            assertThat(row.get("enabled")).as(entry.getKey()).isEqualTo(false);
+            assertThat(((Number)row.get("credential_epoch")).longValue()).isEqualTo(4L);
+            assertThat(row.get("password_hash")).isEqualTo("deleted");
+            assertThat(row.get("display_name")).isEqualTo("Deleted test account");
+            assertThat(row.get("username")).isEqualTo(entry.getKey());
+            for(String table:List.of("account_profiles","account_preferences","account_profile_links","logical_sign_ins","sign_in_challenges"))
+                assertThat(jdbc.queryForObject("SELECT count(*) FROM "+table+" WHERE account_id=?",Integer.class,id)).as(table).isZero();
+            for(String table:List.of("oauth2_authorization","oauth2_authorization_consent"))
+                assertThat(jdbc.queryForObject("SELECT count(*) FROM "+table+" WHERE principal_name=?",Integer.class,id.toString())).as(table).isZero();
+            var registry=jdbc.queryForMap("SELECT creation_state,last_changed_by FROM test_accounts WHERE account_id=?",id);
+            assertThat(registry.get("creation_state")).isEqualTo("deleted");
+            assertThat(registry.get("last_changed_by")).isEqualTo("V7");
+        }
+        assertThat(jdbc.queryForList("SELECT * FROM accounts WHERE id=?",learner.accountId())).isEqualTo(learnerBefore);
+        assertThat(jdbc.queryForList("SELECT * FROM accounts WHERE id=?",impostor)).isEqualTo(impostorBefore);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM account_profiles WHERE account_id=?",Integer.class,impostor)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM test_accounts WHERE creation_state='active'",Integer.class)).isEqualTo(27);
+        // Rerunning V7 is harmless and a retired identity cannot regain credentials through maintenance.
+        applyV7();
+        assertThat(jdbc.queryForObject("SELECT credential_epoch FROM accounts WHERE id=?",Long.class,staff.get("admin01"))).isEqualTo(4L);
+        assertThat(seed()).allMatch(r -> !r.created());
+        int rotated=transaction.execute(status -> service.rotate("rotated-synthetic-learners"));
+        assertThat(rotated).isEqualTo(27);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM accounts WHERE password_hash='deleted'",Integer.class)).isEqualTo(8);
     }
     @Test void createdIdentityRemainsDisabledUntilActivationAndDeletionRevokesIt() {
         UUID id=UUID.randomUUID();String username="test-0123456789abcdef01234567";

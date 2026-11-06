@@ -22,14 +22,12 @@ public class TestAccountService {
     }
 
     @Transactional
-    public List<Result> seed(String learnerPassword, String staffPassword) {
+    public List<Result> seed(String learnerPassword) {
         policy.requireEnabled();
         validatePassword(learnerPassword);
-        validatePassword(staffPassword);
         // Serialize maintenance, including concurrent startup calls, across instances.
         jdbc.execute("LOCK TABLE test_accounts IN SHARE ROW EXCLUSIVE MODE");
-        return TestAccountRoster.entries().stream().map(entry -> seed(entry,
-                entry.staff() ? staffPassword : learnerPassword)).toList();
+        return TestAccountRoster.entries().stream().map(entry -> seed(entry, learnerPassword)).toList();
     }
 
     private Result seed(TestAccountRoster.Entry entry, String password) {
@@ -138,10 +136,9 @@ public class TestAccountService {
     }
 
     @Transactional
-    public int rotate(String learnerPassword, String staffPassword) {
+    public int rotate(String learnerPassword) {
         policy.requireEnabled();
         validatePassword(learnerPassword);
-        validatePassword(staffPassword);
         jdbc.execute("LOCK TABLE test_accounts IN SHARE ROW EXCLUSIVE MODE");
         int updated = 0;
         for (var entry : TestAccountRoster.entries()) {
@@ -149,7 +146,7 @@ public class TestAccountService {
                     UUID.class, entry.accountId(), entry.username());
             if (registered.isEmpty()) continue;
             int count = jdbc.update("UPDATE accounts SET password_hash=?,credential_epoch=credential_epoch+1,password_failure_count=0,password_failure_window=NULL WHERE id=? AND username=?",
-                    encoder.encode(entry.staff() ? staffPassword : learnerPassword), entry.accountId(), entry.username());
+                    encoder.encode(learnerPassword), entry.accountId(), entry.username());
             if (count != 1) throw new AccountFailure(409, "TEST_ACCOUNT_CONFLICT", "A test account changed during maintenance.");
             jdbc.update("DELETE FROM oauth2_authorization WHERE principal_name=?", entry.accountId().toString());
             jdbc.update("UPDATE logical_sign_ins SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE account_id=?", entry.accountId());
