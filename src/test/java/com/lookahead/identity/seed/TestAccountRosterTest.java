@@ -8,12 +8,11 @@ import static org.assertj.core.api.Assertions.*;
 class TestAccountRosterTest {
     @Test void rosterPreservesLearnerIdsAndExcludesTheExistingOwner() {
         var entries = TestAccountRoster.entries();
-        assertThat(entries).hasSize(35);
-        assertThat(entries.stream().filter(e -> !e.staff())).hasSize(27);
-        assertThat(entries.stream().filter(TestAccountRoster.Entry::staff)).hasSize(8);
+        assertThat(entries).hasSize(27);
         assertThat(entries.stream().map(TestAccountRoster.Entry::username)).doesNotHaveDuplicates()
-                .doesNotContain("author01", "author@lookahead.test")
-                .contains("learner01", "learner10", "learner27", "coauthor01", "coauthor02", "admin06");
+                .doesNotContain("author01", "author@lookahead.test", "coauthor01", "coauthor02", "admin01", "admin06")
+                .contains("learner01", "learner10", "learner27")
+                .allMatch(name -> name.matches("learner(0[1-9]|1[0-9]|2[0-7])"));
         var first = entries.getFirst();
         assertThat(first.accountId()).isEqualTo(UUID.nameUUIDFromBytes(
                 "lookahead-local-test:learner01".getBytes(StandardCharsets.UTF_8)));

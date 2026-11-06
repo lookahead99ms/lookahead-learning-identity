@@ -10,17 +10,17 @@ import jakarta.servlet.http.HttpServletResponse;
 @Profile("accounts")
 @RequestMapping("/internal/v1/test-accounts")
 public class TestAccountController {
-    public record Passwords(String learnerPassword, String staffPassword) {
+    public record Passwords(String learnerPassword) {
         @Override public String toString() { return "Passwords[redacted]"; }
     }
     private final TestAccountService service;
     public TestAccountController(TestAccountService service) { this.service = service; }
     @ModelAttribute void noStore(HttpServletResponse response) { response.setHeader("Cache-Control", "no-store"); }
     @PostMapping("/seed") public Object seed(@RequestBody Passwords passwords) {
-        return service.seed(passwords.learnerPassword(), passwords.staffPassword());
+        return service.seed(passwords.learnerPassword());
     }
     @PostMapping("/passwords") public Object passwords(@RequestBody Passwords passwords) {
-        return Map.of("updated", service.rotate(passwords.learnerPassword(), passwords.staffPassword()));
+        return Map.of("updated", service.rotate(passwords.learnerPassword()));
     }
     public record Provision(UUID accountId, String username, String password) {
         @Override public String toString() { return "Provision[redacted]"; }

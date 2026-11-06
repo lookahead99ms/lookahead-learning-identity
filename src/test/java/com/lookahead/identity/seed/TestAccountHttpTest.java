@@ -28,8 +28,8 @@ class TestAccountHttpTest {
     static class App {
         @Bean TestAccountService service() {
             var service=mock(TestAccountService.class);
-            when(service.seed("synthetic-learner-only", "synthetic-staff-only")).thenReturn(List.of());
-            when(service.rotate("synthetic-learner-only", "synthetic-staff-only")).thenReturn(35);
+            when(service.seed("synthetic-learner-only")).thenReturn(List.of());
+            when(service.rotate("synthetic-learner-only")).thenReturn(27);
             return service;
         }
     }
@@ -41,7 +41,7 @@ class TestAccountHttpTest {
                 .encodeToString(credentials.getBytes(StandardCharsets.UTF_8)));
         builder.method(method,HttpRequest.BodyPublishers.ofString(path.equals("disable-real")
                 ? "{\"accountId\":\"00000000-0000-0000-0000-000000000001\"}"
-                : "{\"learnerPassword\":\"synthetic-learner-only\",\"staffPassword\":\"synthetic-staff-only\"}"));
+                : "{\"learnerPassword\":\"synthetic-learner-only\"}"));
         return HttpClient.newHttpClient().send(builder.build(),HttpResponse.BodyHandlers.ofString());
     }
     private static final String OPERATOR="lookahead-test-account-operator:synthetic-test-account-operator-credential-only";
@@ -58,15 +58,14 @@ class TestAccountHttpTest {
             assertThat(success.statusCode()).isEqualTo(200);
             assertThat(success.headers().firstValue("cache-control")).contains("no-store");
             assertThat(success.headers().firstValue("set-cookie")).isEmpty();
-            assertThat(success.body()).doesNotContain("synthetic-learner", "synthetic-staff");
+            assertThat(success.body()).doesNotContain("synthetic-learner");
         }
-        assertThat(send("POST","passwords",OPERATOR).body()).contains("\"updated\":35");
+        assertThat(send("POST","passwords",OPERATOR).body()).contains("\"updated\":27");
     }
     @Test void safeMethodsAndUnlistedOperationsCannotMutate() throws Exception {
         assertThat(send("GET","seed",OPERATOR).statusCode()).isEqualTo(403);
         assertThat(send("POST","reset",OPERATOR).statusCode()).isEqualTo(403);
-        assertThat(new TestAccountController.Passwords("private-one","private-two").toString())
-                .doesNotContain("private-one","private-two");
+        assertThat(new TestAccountController.Passwords("private-one").toString()).doesNotContain("private-one");
     }
     @Test void creationAndDeletionEndpointsRequireTheOperatorAndDoNotExposePasswords() throws Exception {
         for (String operation : List.of("provision", "activate", "disable", "disable-real")) {
