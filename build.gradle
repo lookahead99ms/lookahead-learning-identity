@@ -17,7 +17,7 @@ buildscript {
 plugins {
     id 'java'
     id 'jacoco'
-    id 'org.springframework.boot' version '4.1.1'
+    id 'org.springframework.boot' version '4.2.0'
     // DLV-1026: Google Java Style, enforced by spotlessCheck as part of check.
     id 'com.diffplug.spotless' version '8.11.0'
 }
