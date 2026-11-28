@@ -21,47 +21,68 @@ import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 public class TokenVerificationSecurity {
-    public static final String USERNAME = "lookahead-domain-verifier";
-    private final byte[] expectedSecret;
-    public TokenVerificationSecurity(@Value("${app.identity.verifier-secret}") String secret,
-            @Value("${app.oauth.client-secret}") String gatewaySecret) {
-        if (secret == null || secret.isBlank() || secret.length() < 32)
-            throw new IllegalStateException("Identity verifier requires a separate secret of at least 32 characters");
-        if (secret.equals(gatewaySecret))
-            throw new IllegalStateException("Identity verifier must not reuse the Gateway client secret");
-        expectedSecret = secret.getBytes(StandardCharsets.UTF_8);
-    }
+  public static final String USERNAME = "lookahead-domain-verifier";
+  private final byte[] expectedSecret;
 
-    @Bean @Order(0)
-    SecurityFilterChain tokenVerificationFilterChain(HttpSecurity http) throws Exception {
-        AuthenticationProvider provider = new AuthenticationProvider() {
-            @Override public Authentication authenticate(Authentication request) {
-                byte[] actual = String.valueOf(request.getCredentials()).getBytes(StandardCharsets.UTF_8);
-                boolean matches = MessageDigest.isEqual(expectedSecret, actual);
-                if (!USERNAME.equals(request.getName()) || !matches) throw new BadCredentialsException("Invalid verifier credentials");
-                return UsernamePasswordAuthenticationToken.authenticated(USERNAME, null,
-                        List.of(new SimpleGrantedAuthority("ROLE_TOKEN_VERIFIER")));
-            }
-            @Override public boolean supports(Class<?> authentication) {
-                return UsernamePasswordAuthenticationToken.class.isAssignableFrom(authentication);
-            }
+  public TokenVerificationSecurity(
+      @Value("${app.identity.verifier-secret}") String secret,
+      @Value("${app.oauth.client-secret}") String gatewaySecret) {
+    if (secret == null || secret.isBlank() || secret.length() < 32)
+      throw new IllegalStateException(
+          "Identity verifier requires a separate secret of at least 32 characters");
+    if (secret.equals(gatewaySecret))
+      throw new IllegalStateException("Identity verifier must not reuse the Gateway client secret");
+    expectedSecret = secret.getBytes(StandardCharsets.UTF_8);
+  }
+
+  @Bean
+  @Order(0)
+  SecurityFilterChain tokenVerificationFilterChain(HttpSecurity http) throws Exception {
+    AuthenticationProvider provider =
+        new AuthenticationProvider() {
+          @Override
+          public Authentication authenticate(Authentication request) {
+            byte[] actual =
+                String.valueOf(request.getCredentials()).getBytes(StandardCharsets.UTF_8);
+            boolean matches = MessageDigest.isEqual(expectedSecret, actual);
+            if (!USERNAME.equals(request.getName()) || !matches)
+              throw new BadCredentialsException("Invalid verifier credentials");
+            return UsernamePasswordAuthenticationToken.authenticated(
+                USERNAME, null, List.of(new SimpleGrantedAuthority("ROLE_TOKEN_VERIFIER")));
+          }
+
+          @Override
+          public boolean supports(Class<?> authentication) {
+            return UsernamePasswordAuthenticationToken.class.isAssignableFrom(authentication);
+          }
         };
-        http.securityMatcher("/internal/v1/tokens/verify", "/internal/v1/accounts/lookup", "/internal/v1/accounts", "/internal/v1/accounts/*")
-                .authenticationManager(new ProviderManager(provider))
-                .csrf(AbstractHttpConfigurer::disable)
-                .requestCache(AbstractHttpConfigurer::disable)
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(access -> access
-                        .requestMatchers(HttpMethod.POST, "/internal/v1/tokens/verify", "/internal/v1/accounts/lookup").hasRole("TOKEN_VERIFIER")
-                        .requestMatchers(HttpMethod.GET, "/internal/v1/accounts", "/internal/v1/accounts/*").hasRole("TOKEN_VERIFIER")
-                        .anyRequest().denyAll())
-                .httpBasic(basic -> basic.authenticationEntryPoint((request, response, error) -> {
-                    response.setStatus(401);
-                    response.setContentType("application/json");
-                    response.setHeader("Cache-Control", "no-store");
-                    response.setHeader("WWW-Authenticate", "Basic realm=\"identity-verifier\"");
-                    response.getWriter().write("{\"code\":\"VERIFIER_AUTHENTICATION_REQUIRED\"}");
-                }));
-        return http.build();
-    }
+    http.securityMatcher(
+            "/internal/v1/tokens/verify",
+            "/internal/v1/accounts/lookup",
+            "/internal/v1/accounts",
+            "/internal/v1/accounts/*")
+        .authenticationManager(new ProviderManager(provider))
+        .csrf(AbstractHttpConfigurer::disable)
+        .requestCache(AbstractHttpConfigurer::disable)
+        .sessionManagement(
+            session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        .authorizeHttpRequests(access ->
+            access
+                .requestMatchers(
+                    HttpMethod.POST, "/internal/v1/tokens/verify", "/internal/v1/accounts/lookup")
+                .hasRole("TOKEN_VERIFIER")
+                .requestMatchers(HttpMethod.GET, "/internal/v1/accounts", "/internal/v1/accounts/*")
+                .hasRole("TOKEN_VERIFIER")
+                .anyRequest()
+                .denyAll())
+        .httpBasic(basic ->
+            basic.authenticationEntryPoint((request, response, error) -> {
+              response.setStatus(401);
+              response.setContentType("application/json");
+              response.setHeader("Cache-Control", "no-store");
+              response.setHeader("WWW-Authenticate", "Basic realm=\"identity-verifier\"");
+              response.getWriter().write("{\"code\":\"VERIFIER_AUTHENTICATION_REQUIRED\"}");
+            }));
+    return http.build();
+  }
 }

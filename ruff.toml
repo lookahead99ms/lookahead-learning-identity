@@ -1,0 +1,9 @@
+# DLV-1026: Python follows PEP 8, formatted and linted with Ruff (version pinned in
+# tools/requirements-style.txt). The formatter is Black-compatible.
+line-length = 88
+target-version = "py312"
+# Python files only: Ruff also formats Markdown code blocks, which stay out of scope.
+include = ["*.py"]
+
+[lint]
+select = ["E", "W", "F", "I"]

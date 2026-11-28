@@ -34,6 +34,41 @@ timestamps, IDs, grants and credential exclusion. Cross-service verification is
 orchestrated separately; passing these tests is not proof of a complete OAuth
 journey.
 
+## Code style (DLV-1026)
+
+Java follows [Google Java Style](https://google.github.io/styleguide/javaguide.html):
+every file under `src/main/java` and `src/test/java` is formatted by
+google-java-format 2.0.0 through the Spotless Gradle plugin 8.11.0 (both pinned in
+`build.gradle`), with the formatter's command-line defaults: imports sorted, unused
+imports removed, long strings reflowed and Javadoc formatted. `spotlessCheck` runs
+as part of `./gradlew check`, so a misformatted file fails the build and CI. Fix
+formatting with:
+
+```sh
+./gradlew spotlessApply
+```
+
+The 100-column limit is held by `SourceLineLengthTest`, which fails on any Java
+line over 100 columns except package and import lines and lines that contain a
+URL (the guide's exceptions). google-java-format cannot shorten a line comment, a
+text-block line or a string without spaces; split those by hand. In a text block,
+end the line with `\` (a line continuation that adds no character to the string)
+and start the next line at the block's own indentation.
+
+Python follows PEP 8, formatted and linted by Ruff 0.17.5 with line length 88 and
+rule sets E, W, F and I (`ruff.toml`). Ruff is installed with hash checking from
+`tools/requirements-style.txt`; CI runs the same commands:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install --no-deps --require-hashes -r tools/requirements-style.txt
+.venv/bin/ruff format --check .
+.venv/bin/ruff check .
+```
+
+Run `.venv/bin/ruff format .` and `.venv/bin/ruff check --fix .` to apply fixes.
+Markdown, JSON, YAML and shell files are not formatted by these tools.
+
 ## Required release coverage
 
 `./gradlew clean check` runs JaCoCo 0.8.15 and requires at least **85% production-code line coverage**, with no main-source exclusions. XML/HTML/CSV reports are under `build/reports/jacoco/test/`. Branch coverage is reported separately. The ordinary standalone `test bootJar` command remains useful for unit development; it does not certify the release coverage gate.

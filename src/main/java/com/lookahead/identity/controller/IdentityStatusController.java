@@ -8,10 +8,14 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 public class IdentityStatusController {
-    private final String version;
-    public IdentityStatusController(@Value("${app.version}") String version) { this.version = version; }
-    @GetMapping("/api/v1/status")
-    public ApiResponse<ApplicationStatus> status() {
-        return ApiResponse.success(new ApplicationStatus("lookahead-identity", "UP", version));
-    }
+  private final String version;
+
+  public IdentityStatusController(@Value("${app.version}") String version) {
+    this.version = version;
+  }
+
+  @GetMapping("/api/v1/status")
+  public ApiResponse<ApplicationStatus> status() {
+    return ApiResponse.success(new ApplicationStatus("lookahead-identity", "UP", version));
+  }
 }
