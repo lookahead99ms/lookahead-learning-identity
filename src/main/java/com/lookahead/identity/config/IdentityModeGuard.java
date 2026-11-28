@@ -7,34 +7,39 @@ import org.springframework.stereotype.Component;
 
 @Component
 public final class IdentityModeGuard {
-    // Reject the old Domain API profile as well as its current name during migration.
-    private static final String LEGACY_DOMAIN_PROFILE = "platform";
+  // Reject the old Domain API profile as well as its current name during migration.
+  private static final String LEGACY_DOMAIN_PROFILE = "platform";
 
-    public IdentityModeGuard(Environment environment) {
-        if (!environment.acceptsProfiles(Profiles.of("accounts & oauth-server"))
-                || environment.acceptsProfiles(Profiles.of("gateway | domain-api | resource | resource-server"))
-                || environment.acceptsProfiles(Profiles.of(LEGACY_DOMAIN_PROFILE)))
-            throw new IllegalStateException("Identity requires accounts and oauth-server exclusively");
-        String deployment = environment.getProperty("app.deployment-environment", "");
-        if (!Set.of("local", "dev", "prod").contains(deployment))
-            throw new IllegalStateException("Identity requires canonical local, dev or prod environment");
-        if (environment.acceptsProfiles(Profiles.of("production | development")))
-            throw new IllegalStateException("Use canonical local, dev or prod profiles");
-        for (String profile : Set.of("local", "dev", "prod")) {
-            if (environment.acceptsProfiles(Profiles.of(profile)) && !profile.equals(deployment))
-                throw new IllegalStateException("Identity profile must match its deployment environment");
-        }
-        if (!"local".equals(deployment) && environment.acceptsProfiles(Profiles.of("local-test")))
-            throw new IllegalStateException("Synthetic identities require the local environment");
-        if (!"local".equals(deployment)
-                && !environment.getProperty("server.servlet.session.cookie.secure", Boolean.class, true))
-            throw new IllegalStateException("Identity requires secure cookies outside local development");
-        int maximumActiveSessions = environment.getProperty("app.sign-ins.maximum-active-sessions", Integer.class, 2);
-        if (("local".equals(deployment) && maximumActiveSessions != 0)
-                || (!"local".equals(deployment) && maximumActiveSessions != 2))
-            throw new IllegalStateException("Local sign-ins must be unlimited; DEV and PROD must allow exactly two");
-        if (!environment.getProperty("server.servlet.session.cookie.name", "LOOKAHEAD_SESSION")
-                .matches("[A-Z][A-Z0-9_]{2,63}"))
-            throw new IllegalStateException("Identity cookie name must be 3 to 64 uppercase letters, digits or underscores");
+  public IdentityModeGuard(Environment environment) {
+    if (!environment.acceptsProfiles(Profiles.of("accounts & oauth-server"))
+        || environment.acceptsProfiles(
+            Profiles.of("gateway | domain-api | resource | resource-server"))
+        || environment.acceptsProfiles(Profiles.of(LEGACY_DOMAIN_PROFILE)))
+      throw new IllegalStateException("Identity requires accounts and oauth-server exclusively");
+    String deployment = environment.getProperty("app.deployment-environment", "");
+    if (!Set.of("local", "dev", "prod").contains(deployment))
+      throw new IllegalStateException("Identity requires canonical local, dev or prod environment");
+    if (environment.acceptsProfiles(Profiles.of("production | development")))
+      throw new IllegalStateException("Use canonical local, dev or prod profiles");
+    for (String profile : Set.of("local", "dev", "prod")) {
+      if (environment.acceptsProfiles(Profiles.of(profile)) && !profile.equals(deployment))
+        throw new IllegalStateException("Identity profile must match its deployment environment");
     }
+    if (!"local".equals(deployment) && environment.acceptsProfiles(Profiles.of("local-test")))
+      throw new IllegalStateException("Synthetic identities require the local environment");
+    if (!"local".equals(deployment)
+        && !environment.getProperty("server.servlet.session.cookie.secure", Boolean.class, true))
+      throw new IllegalStateException("Identity requires secure cookies outside local development");
+    int maximumActiveSessions =
+        environment.getProperty("app.sign-ins.maximum-active-sessions", Integer.class, 2);
+    if (("local".equals(deployment) && maximumActiveSessions != 0)
+        || (!"local".equals(deployment) && maximumActiveSessions != 2))
+      throw new IllegalStateException(
+          "Local sign-ins must be unlimited; DEV and PROD must allow exactly two");
+    if (!environment
+        .getProperty("server.servlet.session.cookie.name", "LOOKAHEAD_SESSION")
+        .matches("[A-Z][A-Z0-9_]{2,63}"))
+      throw new IllegalStateException(
+          "Identity cookie name must be 3 to 64 uppercase letters, digits or underscores");
+  }
 }

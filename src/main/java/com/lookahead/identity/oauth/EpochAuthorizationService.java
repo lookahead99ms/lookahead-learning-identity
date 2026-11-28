@@ -8,38 +8,84 @@ import org.springframework.security.oauth2.server.authorization.*;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-/** Serializes authorization publication with credential rotation; stale refresh/code saves fail closed. */
+/**
+ * Serializes authorization publication with credential rotation; stale refresh/code saves fail
+ * closed.
+ */
 public final class EpochAuthorizationService implements OAuth2AuthorizationService {
-    public static final String EPOCH = "lookahead.credential-epoch";
-    public static final String SIGN_IN = "lookahead.logical-sign-in";
-    private final OAuth2AuthorizationService delegate;
-    private final JdbcTemplate jdbc;
-    private final TransactionTemplate transaction;
-    private final com.lookahead.identity.signin.SignInRegistry signIns;
-    public EpochAuthorizationService(OAuth2AuthorizationService delegate, JdbcTemplate jdbc, PlatformTransactionManager manager, com.lookahead.identity.signin.SignInRegistry signIns) {
-        this.signIns=signIns; this.delegate=delegate; this.jdbc=jdbc; this.transaction=new TransactionTemplate(manager);
+  public static final String EPOCH = "lookahead.credential-epoch";
+  public static final String SIGN_IN = "lookahead.logical-sign-in";
+  private final OAuth2AuthorizationService delegate;
+  private final JdbcTemplate jdbc;
+  private final TransactionTemplate transaction;
+  private final com.lookahead.identity.signin.SignInRegistry signIns;
+
+  public EpochAuthorizationService(
+      OAuth2AuthorizationService delegate,
+      JdbcTemplate jdbc,
+      PlatformTransactionManager manager,
+      com.lookahead.identity.signin.SignInRegistry signIns) {
+    this.signIns = signIns;
+    this.delegate = delegate;
+    this.jdbc = jdbc;
+    this.transaction = new TransactionTemplate(manager);
+  }
+
+  private boolean current(OAuth2Authorization value, boolean lock) {
+    if (value == null) return false;
+    UUID id;
+    try {
+      id = UUID.fromString(value.getPrincipalName());
+    } catch (IllegalArgumentException e) {
+      return false;
     }
-    private boolean current(OAuth2Authorization value, boolean lock) {
-        if (value == null) return false;
-        UUID id;
-        try { id=UUID.fromString(value.getPrincipalName()); } catch (IllegalArgumentException e) { return false; }
-        var rows=jdbc.query("SELECT credential_epoch,enabled FROM accounts WHERE id=?"+(lock?" FOR UPDATE":""),
-                (rs,n)-> rs.getBoolean("enabled") && Long.toString(rs.getLong("credential_epoch")).equals(value.getAttribute(EPOCH)),id);
-        if(rows.size()!=1 || !rows.getFirst())return false;
-        try {
-            String epoch=value.getAttribute(EPOCH);String signIn=value.getAttribute(SIGN_IN);
-            if(signIn==null)return false;
-            return signIns.current(id,Long.parseLong(epoch),UUID.fromString(signIn),true)!=null;
-        } catch(IllegalArgumentException | com.lookahead.identity.exception.AccountFailure invalid) {return false;}
+    var rows =
+        jdbc.query(
+            "SELECT credential_epoch,enabled FROM accounts WHERE id=?"
+                + (lock ? " FOR UPDATE" : ""),
+            (rs, n) ->
+                rs.getBoolean("enabled")
+                    && Long.toString(rs.getLong("credential_epoch"))
+                        .equals(value.getAttribute(EPOCH)),
+            id);
+    if (rows.size() != 1 || !rows.getFirst()) return false;
+    try {
+      String epoch = value.getAttribute(EPOCH);
+      String signIn = value.getAttribute(SIGN_IN);
+      if (signIn == null) return false;
+      return signIns.current(id, Long.parseLong(epoch), UUID.fromString(signIn), true) != null;
+    } catch (IllegalArgumentException | com.lookahead.identity.exception.AccountFailure invalid) {
+      return false;
     }
-    @Override public void save(OAuth2Authorization value) {
-        transaction.executeWithoutResult(status->{
-            if (!current(value,true)) throw new OAuth2AuthenticationException(new OAuth2Error("invalid_grant"));
-            delegate.save(value);
-            jdbc.update("UPDATE oauth2_authorization SET logical_sign_in_id=? WHERE id=?",UUID.fromString((String)value.getAttribute(SIGN_IN)),value.getId());
-        });
-    }
-    @Override public void remove(OAuth2Authorization value) { delegate.remove(value); }
-    @Override public OAuth2Authorization findById(String id) { var value=delegate.findById(id); return current(value,false)?value:null; }
-    @Override public OAuth2Authorization findByToken(String token, OAuth2TokenType type) { var value=delegate.findByToken(token,type); return current(value,false)?value:null; }
+  }
+
+  @Override
+  public void save(OAuth2Authorization value) {
+    transaction.executeWithoutResult(status -> {
+      if (!current(value, true))
+        throw new OAuth2AuthenticationException(new OAuth2Error("invalid_grant"));
+      delegate.save(value);
+      jdbc.update(
+          "UPDATE oauth2_authorization SET logical_sign_in_id=? WHERE id=?",
+          UUID.fromString((String) value.getAttribute(SIGN_IN)),
+          value.getId());
+    });
+  }
+
+  @Override
+  public void remove(OAuth2Authorization value) {
+    delegate.remove(value);
+  }
+
+  @Override
+  public OAuth2Authorization findById(String id) {
+    var value = delegate.findById(id);
+    return current(value, false) ? value : null;
+  }
+
+  @Override
+  public OAuth2Authorization findByToken(String token, OAuth2TokenType type) {
+    var value = delegate.findByToken(token, type);
+    return current(value, false) ? value : null;
+  }
 }

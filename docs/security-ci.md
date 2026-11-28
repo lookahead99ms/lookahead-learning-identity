@@ -143,3 +143,15 @@ not an integrated authentication or deployment claim. Separately, all 222 Java
 tests passed with disposable PostgreSQL and 88.59% application line coverage.
 All 25 tooling tests passed; the base-image parser has 6/6 lines covered (100%).
 The configuration scan also passed. Hosted CI remains unverified after push.
+
+## November 27 formatting-only source-binding refresh (DLV-1026)
+
+Google Java Style formatting changed whitespace, line breaks and import order in
+`TokenVerificationSecurity` and `TestAccountSecurity`, so both SAST exception
+source digests were refreshed. The reviewed diff is formatting only: the compiled
+classes are identical (`javap -c -p -constants -s`, with no line-number tables) to
+those built from the previously reviewed source. Rule, file scope, rationale and
+the 2026-11-13 expiry are unchanged. The expiry has passed, so the SAST gate and
+`test_repository_sast_exception_binding_is_current` fail until the owner renews
+the review; this refresh does not renew it.
+

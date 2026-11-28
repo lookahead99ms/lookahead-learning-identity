@@ -10,7 +10,9 @@ import org.springframework.core.env.Environment;
 @Profile("oauth-server | gateway")
 @EnableConfigurationProperties(OAuthProperties.class)
 public class OAuthPropertiesConfiguration {
-    @Bean OAuthSettings oauthSettings(OAuthProperties properties, Environment environment) {
-        return OAuthSettings.from(properties, "local".equals(environment.getProperty("app.deployment-environment")));
-    }
+  @Bean
+  OAuthSettings oauthSettings(OAuthProperties properties, Environment environment) {
+    return OAuthSettings.from(
+        properties, "local".equals(environment.getProperty("app.deployment-environment")));
+  }
 }

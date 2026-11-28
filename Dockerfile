@@ -1,4 +1,4 @@
-FROM eclipse-temurin:21-jdk-alpine@sha256:82801f9dcdcbad5a05082aba8c86d1da5b72ccb498e71318b1f91b5a477887b3 AS build
+FROM eclipse-temurin:21-jdk-alpine@sha256:c07bb82e004a166b5d3d63b84ad70e2e822f228505e2e0c0b8dfdc2890d22f13 AS build
 WORKDIR /workspace
 ENV GRADLE_USER_HOME=/tmp/gradle-cache
 COPY gradlew ./
@@ -10,7 +10,7 @@ RUN ./gradlew --no-daemon clean test bootJar \
     && mkdir /workspace/health \
     && javac --release 21 -d /workspace/health src/main/java/com/lookahead/identity/health/ContainerHealthcheck.java
 
-FROM eclipse-temurin:21-jre-alpine@sha256:ac05c3c42b7c2f1a52c9bd52f01041fa1958231b15ebeae7420429cbc5baf474 AS runtime
+FROM eclipse-temurin:21-jre-alpine@sha256:5d7689f47d670aca766b9503a70bccc2d73b4eb9221ae8f714ae958313c4ce70 AS runtime
 WORKDIR /opt/lookahead
 RUN addgroup -g 10001 lookahead && adduser -D -H -u 10001 -G lookahead lookahead
 COPY --from=build --chown=10001:10001 /workspace/build/libs/lookahead-identity.jar /opt/lookahead/app.jar

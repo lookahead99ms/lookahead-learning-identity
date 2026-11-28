@@ -1,90 +1,150 @@
-import copy
-from datetime import date, timedelta
 import importlib.util
-from pathlib import Path
-import unittest
-from unittest.mock import patch
 import tempfile
+import unittest
+from datetime import date, timedelta
+from pathlib import Path
+from unittest.mock import patch
 
-spec = importlib.util.spec_from_file_location('security_checks', Path(__file__).with_name('check.py'))
+spec = importlib.util.spec_from_file_location(
+    "security_checks", Path(__file__).with_name("check.py")
+)
 checks = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(checks)
 
+
 class SecurityGateTests(unittest.TestCase):
     def test_full_repository_analysis_rejects_incremental_or_invalid_scope(self):
-        run = {'tool': {'driver': {'name': 'CodeQL', 'rules': [{'id': 'fixture'}]}},
-               'results': [], 'invocations': [{'executionSuccessful': True}]}
-        for properties in ({'incrementalMode': 'diff-informed'}, {'incrementalMode': 'overlay'},
-                           {'incrementalMode': 'diff-informed,overlay'}, {'incrementalMode': True}, []):
-            with self.subTest(properties=properties), self.assertRaisesRegex(ValueError, '^SAST full analysis required$'):
-                checks.sarif_gate([{'runs': [{**run, 'properties': properties}]}])
-        self.assertEqual(0, checks.sarif_gate([{'runs': [run]}]))
-        workflow = checks.json.loads((checks.ROOT / '.github/workflows/ci.yml').read_text())
-        self.assertEqual('false', workflow['jobs']['verify']['env']['CODEQL_ACTION_DIFF_INFORMED_QUERIES'])
-        self.assertEqual('false', workflow['jobs']['verify']['env']['CODEQL_ACTION_OVERLAY_ANALYSIS'])
+        run = {
+            "tool": {"driver": {"name": "CodeQL", "rules": [{"id": "fixture"}]}},
+            "results": [],
+            "invocations": [{"executionSuccessful": True}],
+        }
+        for properties in (
+            {"incrementalMode": "diff-informed"},
+            {"incrementalMode": "overlay"},
+            {"incrementalMode": "diff-informed,overlay"},
+            {"incrementalMode": True},
+            [],
+        ):
+            with (
+                self.subTest(properties=properties),
+                self.assertRaisesRegex(ValueError, "^SAST full analysis required$"),
+            ):
+                checks.sarif_gate([{"runs": [{**run, "properties": properties}]}])
+        self.assertEqual(0, checks.sarif_gate([{"runs": [run]}]))
+        workflow = checks.json.loads(
+            (checks.ROOT / ".github/workflows/ci.yml").read_text()
+        )
+        self.assertEqual(
+            "false",
+            workflow["jobs"]["verify"]["env"]["CODEQL_ACTION_DIFF_INFORMED_QUERIES"],
+        )
+        self.assertEqual(
+            "false", workflow["jobs"]["verify"]["env"]["CODEQL_ACTION_OVERLAY_ANALYSIS"]
+        )
 
     def test_public_failure_reason_exposes_only_reviewed_constants(self):
         for reason in checks.SAFE_SAST_FAILURES:
             self.assertIn(reason, checks.failure_message(ValueError(reason)))
-        for error in (ValueError('synthetic-secret'), ValueError('Expired SAST exception synthetic-secret'),
-                      KeyError('synthetic-secret'), OSError('synthetic-secret')):
-            self.assertNotIn('synthetic-secret', checks.failure_message(error))
-            self.assertIn('inspect the step', checks.failure_message(error))
+        for error in (
+            ValueError("synthetic-secret"),
+            ValueError("Expired SAST exception synthetic-secret"),
+            KeyError("synthetic-secret"),
+            OSError("synthetic-secret"),
+        ):
+            self.assertNotIn("synthetic-secret", checks.failure_message(error))
+            self.assertIn("inspect the step", checks.failure_message(error))
 
     def test_notification_rejection_has_safe_distinct_reason(self):
-        run = {'tool': {'driver': {'name': 'CodeQL', 'rules': [{'id': 'fixture'}]}},
-               'results': [], 'invocations': [{'executionSuccessful': True,
-                   'toolExecutionNotifications': [{'level': 'warning', 'message': {'text': 'synthetic-secret'}}]}]}
-        with self.assertRaisesRegex(ValueError, '^SAST notification requires review$'):
-            checks.sarif_gate([{'runs': [run]}])
-        run['invocations'][0]['toolExecutionNotifications'] = 'synthetic-secret'
-        with self.assertRaisesRegex(ValueError, '^SAST notification inventory invalid$'):
-            checks.sarif_gate([{'runs': [run]}])
+        run = {
+            "tool": {"driver": {"name": "CodeQL", "rules": [{"id": "fixture"}]}},
+            "results": [],
+            "invocations": [
+                {
+                    "executionSuccessful": True,
+                    "toolExecutionNotifications": [
+                        {"level": "warning", "message": {"text": "synthetic-secret"}}
+                    ],
+                }
+            ],
+        }
+        with self.assertRaisesRegex(ValueError, "^SAST notification requires review$"):
+            checks.sarif_gate([{"runs": [run]}])
+        run["invocations"][0]["toolExecutionNotifications"] = "synthetic-secret"
+        with self.assertRaisesRegex(
+            ValueError, "^SAST notification inventory invalid$"
+        ):
+            checks.sarif_gate([{"runs": [run]}])
 
     def test_repository_sast_exception_binding_is_current(self):
         exceptions = checks.load_sast_exceptions()
-        self.assertEqual({('java/spring-disabled-csrf-protection',
-            'src/main/java/com/lookahead/identity/verification/TokenVerificationSecurity.java'),
-            ('java/spring-disabled-csrf-protection',
-            'src/main/java/com/lookahead/identity/seed/TestAccountSecurity.java')}, set(exceptions))
-        self.assertEqual({'2026-11-13'}, {item['expiresAt'] for item in exceptions.values()})
+        self.assertEqual(
+            {
+                (
+                    "java/spring-disabled-csrf-protection",
+                    "src/main/java/com/lookahead/identity/"
+                    "verification/TokenVerificationSecurity.java",
+                ),
+                (
+                    "java/spring-disabled-csrf-protection",
+                    "src/main/java/com/lookahead/identity/"
+                    "seed/TestAccountSecurity.java",
+                ),
+            },
+            set(exceptions),
+        )
+        self.assertEqual(
+            {"2026-12-27"}, {item["expiresAt"] for item in exceptions.values()}
+        )
 
-    def test_reviewed_repository_exceptions_expire_individually_and_reject_source_drift(self):
+    def test_reviewed_repository_exceptions_expire_individually_and_reject_source_drift(
+        self,
+    ):
         document = checks.read(checks.SAST_EXCEPTIONS)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            policy = root / 'exceptions.json'
-            for item in document['exceptions']:
-                with self.subTest(file=item['file']):
-                    source = root / item['file']
+            policy = root / "exceptions.json"
+            for item in document["exceptions"]:
+                with self.subTest(file=item["file"]):
+                    source = root / item["file"]
                     source.parent.mkdir(parents=True, exist_ok=True)
-                    reviewed = (checks.ROOT / item['file']).read_bytes()
+                    reviewed = (checks.ROOT / item["file"]).read_bytes()
                     source.write_bytes(reviewed)
-                    policy.write_text(checks.json.dumps({'version': 1, 'exceptions': [item]}))
-                    expiry = date.fromisoformat(item['expiresAt'])
-                    self.assertEqual(1, len(checks.load_sast_exceptions(policy, root, expiry)))
-                    with self.assertRaisesRegex(ValueError, '^Expired SAST exception$'):
-                        checks.load_sast_exceptions(policy, root, expiry + timedelta(days=1))
-                    source.write_bytes(reviewed + b'\n// source drift fixture\n')
-                    with self.assertRaisesRegex(ValueError, '^SAST exception source changed or is missing$'):
+                    policy.write_text(
+                        checks.json.dumps({"version": 1, "exceptions": [item]})
+                    )
+                    expiry = date.fromisoformat(item["expiresAt"])
+                    self.assertEqual(
+                        1, len(checks.load_sast_exceptions(policy, root, expiry))
+                    )
+                    with self.assertRaisesRegex(ValueError, "^Expired SAST exception$"):
+                        checks.load_sast_exceptions(
+                            policy, root, expiry + timedelta(days=1)
+                        )
+                    source.write_bytes(reviewed + b"\n// source drift fixture\n")
+                    with self.assertRaisesRegex(
+                        ValueError, "^SAST exception source changed or is missing$"
+                    ):
                         checks.load_sast_exceptions(policy, root, expiry)
 
     def test_sast_review_contract_rejects_malformed_and_duplicate_records(self):
         document = checks.read(checks.SAST_EXCEPTIONS)
-        item = document['exceptions'][0]
-        today = date.fromisoformat(item['expiresAt'])
+        item = document["exceptions"][0]
+        today = date.fromisoformat(item["expiresAt"])
         malformed = [
-            {'version': 2, 'exceptions': [item]},
-            {'version': 1, 'exceptions': {}},
-            {'version': 1, 'exceptions': [{**item, 'rationale': ''}]},
-            {'version': 1, 'exceptions': [{**item, 'file': '../Security.java'}]},
-            {'version': 1, 'exceptions': [{**item, 'file': '/Security.java'}]},
-            {'version': 1, 'exceptions': [{**item, 'expiresAt': 'invalid'}]},
-            {'version': 1, 'exceptions': [item, item]},
+            {"version": 2, "exceptions": [item]},
+            {"version": 1, "exceptions": {}},
+            {"version": 1, "exceptions": [{**item, "rationale": ""}]},
+            {"version": 1, "exceptions": [{**item, "file": "../Security.java"}]},
+            {"version": 1, "exceptions": [{**item, "file": "/Security.java"}]},
+            {"version": 1, "exceptions": [{**item, "expiresAt": "invalid"}]},
+            {"version": 1, "exceptions": [item, item]},
         ]
         with tempfile.TemporaryDirectory() as directory:
-            policy = Path(directory) / 'exceptions.json'
-            self.assertEqual({}, checks.load_sast_exceptions(policy, checks.ROOT, today))
+            policy = Path(directory) / "exceptions.json"
+            self.assertEqual(
+                {}, checks.load_sast_exceptions(policy, checks.ROOT, today)
+            )
             for candidate in malformed:
                 with self.subTest(document=candidate):
                     policy.write_text(checks.json.dumps(candidate))
@@ -92,158 +152,459 @@ class SecurityGateTests(unittest.TestCase):
                         checks.load_sast_exceptions(policy, checks.ROOT, today)
 
     def test_trace_notifications_are_informational_but_warnings_still_block(self):
-        run = {'tool': {'driver': {'name': 'CodeQL', 'rules': [{'id': 'fixture'}]}},
-               'results': [], 'invocations': [{'executionSuccessful': True,
-                   'toolExecutionNotifications': [{'level': 'none'}]}]}
-        self.assertEqual(0, checks.sarif_gate([{'runs': [run]}]))
-        run['invocations'][0]['toolExecutionNotifications'][0]['level'] = 'warning'
-        with self.assertRaises(ValueError): checks.sarif_gate([{'runs': [run]}])
+        run = {
+            "tool": {"driver": {"name": "CodeQL", "rules": [{"id": "fixture"}]}},
+            "results": [],
+            "invocations": [
+                {
+                    "executionSuccessful": True,
+                    "toolExecutionNotifications": [{"level": "none"}],
+                }
+            ],
+        }
+        self.assertEqual(0, checks.sarif_gate([{"runs": [run]}]))
+        run["invocations"][0]["toolExecutionNotifications"][0]["level"] = "warning"
+        with self.assertRaises(ValueError):
+            checks.sarif_gate([{"runs": [run]}])
 
     def test_notification_summary_never_includes_messages_or_unknown_ids(self):
-        summary = checks.notification_summary([
-            {'level': 'warning', 'descriptor': {'id': 'java/diagnostics/extraction-warnings'},
-             'message': {'text': 'synthetic-secret'}, 'properties': {'secret': 'synthetic-secret'}},
-            {'level': 'synthetic-secret', 'descriptor': {'id': 'synthetic-secret'}},
-            None])
-        self.assertNotIn('synthetic-secret', str(summary))
-        self.assertEqual('java/diagnostics/extraction-warnings', summary[0]['id'])
-        self.assertEqual('invalid', summary[1]['level'])
+        summary = checks.notification_summary(
+            [
+                {
+                    "level": "warning",
+                    "descriptor": {"id": "java/diagnostics/extraction-warnings"},
+                    "message": {"text": "synthetic-secret"},
+                    "properties": {"secret": "synthetic-secret"},
+                },
+                {"level": "synthetic-secret", "descriptor": {"id": "synthetic-secret"}},
+                None,
+            ]
+        )
+        self.assertNotIn("synthetic-secret", str(summary))
+        self.assertEqual("java/diagnostics/extraction-warnings", summary[0]["id"])
+        self.assertEqual("invalid", summary[1]["level"])
 
     def test_resolved_bom_keeps_distinct_versions_and_deduplicates(self):
-        a={'group':'org.example','name':'fixture','version':'1'}
-        bom=checks.java_bom([a,a,{**a,'version':'2'}])
-        self.assertEqual(2,len(bom['components']))
-        with self.assertRaises(ValueError):checks.java_bom([])
+        a = {"group": "org.example", "name": "fixture", "version": "1"}
+        bom = checks.java_bom([a, a, {**a, "version": "2"}])
+        self.assertEqual(2, len(bom["components"]))
+        with self.assertRaises(ValueError):
+            checks.java_bom([])
 
     def test_sarif_clean_and_high_security_finding(self):
-        run={'invocations':[{'executionSuccessful':True}],'tool':{'driver':{'name':'CodeQL','rules':[{'id':'fixture','properties':{'security-severity':'8.1'}}]}},'results':[]}
-        self.assertEqual(0,checks.sarif_gate([{'runs':[run]}]))
-        run['results']=[{'ruleId':'fixture'}]
-        self.assertEqual(1,checks.sarif_gate([{'runs':[run]}]))
+        run = {
+            "invocations": [{"executionSuccessful": True}],
+            "tool": {
+                "driver": {
+                    "name": "CodeQL",
+                    "rules": [
+                        {"id": "fixture", "properties": {"security-severity": "8.1"}}
+                    ],
+                }
+            },
+            "results": [],
+        }
+        self.assertEqual(0, checks.sarif_gate([{"runs": [run]}]))
+        run["results"] = [{"ruleId": "fixture"}]
+        self.assertEqual(1, checks.sarif_gate([{"runs": [run]}]))
 
     def test_sarif_missing_or_failed_analysis_is_not_clean(self):
-        with self.assertRaises(ValueError):checks.sarif_gate([])
-        run={'tool':{'driver':{'name':'CodeQL','rules':[{'id':'fixture'}]}},'invocations':[{'executionSuccessful':False}]}
-        with self.assertRaises(ValueError):checks.sarif_gate([{'runs':[run]}])
-        run['invocations']=[{'executionSuccessful':True}];run['results']=[{'ruleId':'unrecognized'}]
-        with self.assertRaises(ValueError):checks.sarif_gate([{'runs':[run]}])
+        with self.assertRaises(ValueError):
+            checks.sarif_gate([])
+        run = {
+            "tool": {"driver": {"name": "CodeQL", "rules": [{"id": "fixture"}]}},
+            "invocations": [{"executionSuccessful": False}],
+        }
+        with self.assertRaises(ValueError):
+            checks.sarif_gate([{"runs": [run]}])
+        run["invocations"] = [{"executionSuccessful": True}]
+        run["results"] = [{"ruleId": "unrecognized"}]
+        with self.assertRaises(ValueError):
+            checks.sarif_gate([{"runs": [run]}])
 
     def test_sarif_requires_success_and_rejects_incomplete_analysis_notifications(self):
-        clean={'tool':{'driver':{'name':'CodeQL','rules':[{'id':'fixture'}]}},'results':[]}
-        for invocations in (None, [], [{}], [{'executionSuccessful':False}], [{'executionSuccessful':'true'}], [None]):
-            run={**clean,'invocations':invocations}
+        clean = {
+            "tool": {"driver": {"name": "CodeQL", "rules": [{"id": "fixture"}]}},
+            "results": [],
+        }
+        for invocations in (
+            None,
+            [],
+            [{}],
+            [{"executionSuccessful": False}],
+            [{"executionSuccessful": "true"}],
+            [None],
+        ):
+            run = {**clean, "invocations": invocations}
             with self.subTest(invocations=invocations), self.assertRaises(ValueError):
-                checks.sarif_gate([{'runs':[run]}])
-        with self.assertRaises(ValueError): checks.sarif_gate([{'runs':[clean]}])
-        for field in ('toolExecutionNotifications','toolConfigurationNotifications'):
-            for notification in ({'level':'error'},{'level':'warning'},{},{'level':'invalid'},None):
-                run={**clean,'invocations':[{'executionSuccessful':True,field:[notification]}]}
-                with self.subTest(field=field,notification=notification), self.assertRaises(ValueError):
-                    checks.sarif_gate([{'runs':[run]}])
-            run={**clean,'invocations':[{'executionSuccessful':True,field:[{'level':'note'}]}]}
-            self.assertEqual(0,checks.sarif_gate([{'runs':[run]}]))
-            run['invocations'].append({'executionSuccessful':False})
-            with self.assertRaises(ValueError): checks.sarif_gate([{'runs':[run]}])
+                checks.sarif_gate([{"runs": [run]}])
+        with self.assertRaises(ValueError):
+            checks.sarif_gate([{"runs": [clean]}])
+        for field in ("toolExecutionNotifications", "toolConfigurationNotifications"):
+            for notification in (
+                {"level": "error"},
+                {"level": "warning"},
+                {},
+                {"level": "invalid"},
+                None,
+            ):
+                run = {
+                    **clean,
+                    "invocations": [
+                        {"executionSuccessful": True, field: [notification]}
+                    ],
+                }
+                with (
+                    self.subTest(field=field, notification=notification),
+                    self.assertRaises(ValueError),
+                ):
+                    checks.sarif_gate([{"runs": [run]}])
+            run = {
+                **clean,
+                "invocations": [
+                    {"executionSuccessful": True, field: [{"level": "note"}]}
+                ],
+            }
+            self.assertEqual(0, checks.sarif_gate([{"runs": [run]}]))
+            run["invocations"].append({"executionSuccessful": False})
+            with self.assertRaises(ValueError):
+                checks.sarif_gate([{"runs": [run]}])
 
     def test_image_needs_os_and_package_coverage(self):
-        report={'Metadata':{'OS':{'Family':'ubuntu'}},'Results':[{'Class':'os-pkgs','Packages':[{'Name':'fixture','Version':'1'}]}]}
-        self.assertFalse(any(checks.trivy_gate(report,'image').values()))
-        for bad in [{}, {'Results':[]}, {'Results':[{'Packages':[{}]}]}, {'Metadata':{'OS':{'Family':'ubuntu','EOSL':True}},'Results':[{'Packages':[{}]}]}]:
-            with self.assertRaises(ValueError):checks.trivy_gate(bad,'image')
+        report = {
+            "Metadata": {"OS": {"Family": "ubuntu"}},
+            "Results": [
+                {"Class": "os-pkgs", "Packages": [{"Name": "fixture", "Version": "1"}]}
+            ],
+        }
+        self.assertFalse(any(checks.trivy_gate(report, "image").values()))
+        for bad in [
+            {},
+            {"Results": []},
+            {"Results": [{"Packages": [{}]}]},
+            {
+                "Metadata": {"OS": {"Family": "ubuntu", "EOSL": True}},
+                "Results": [{"Packages": [{}]}],
+            },
+        ]:
+            with self.assertRaises(ValueError):
+                checks.trivy_gate(bad, "image")
 
     def test_vulnerability_gate_keeps_unfixed_high_findings(self):
-        report={'Results':[{'Class':'lang-pkgs','Type':'jar','Packages':[{'Name':'fixture','Version':'1'}],'Vulnerabilities':[{'Severity':'HIGH','FixedVersion':''},{'Severity':'LOW'}]}]}
-        self.assertEqual(1,checks.trivy_gate(report,'sbom')['vulnerabilities'])
+        report = {
+            "Results": [
+                {
+                    "Class": "lang-pkgs",
+                    "Type": "jar",
+                    "Packages": [{"Name": "fixture", "Version": "1"}],
+                    "Vulnerabilities": [
+                        {"Severity": "HIGH", "FixedVersion": ""},
+                        {"Severity": "LOW"},
+                    ],
+                }
+            ]
+        }
+        self.assertEqual(1, checks.trivy_gate(report, "sbom")["vulnerabilities"])
 
     def test_secret_always_fails_even_low_severity(self):
-        report={'Results':[{'Class':'config','Target':'Dockerfile','MisconfSummary':{'Successes':1},'Secrets':[{'Severity':'LOW','Match':'synthetic'}]}]}
-        counts=checks.trivy_gate(report,'config')
-        self.assertEqual(1,counts['secrets'])
-        self.assertNotIn('synthetic',str(counts))
+        report = {
+            "Results": [
+                {
+                    "Class": "config",
+                    "Target": "Dockerfile",
+                    "MisconfSummary": {"Successes": 1},
+                    "Secrets": [{"Severity": "LOW", "Match": "synthetic"}],
+                }
+            ]
+        }
+        counts = checks.trivy_gate(report, "config")
+        self.assertEqual(1, counts["secrets"])
+        self.assertNotIn("synthetic", str(counts))
 
     def test_config_coverage_and_high_misconfiguration(self):
-        with self.assertRaises(ValueError):checks.trivy_gate({'Results':[]},'config')
-        counts=checks.trivy_gate({'Results':[{'Class':'config','Target':'Dockerfile','MisconfSummary':{'Failures':1},'Misconfigurations':[{'Severity':'CRITICAL'}]}]},'config')
-        self.assertEqual(1,counts['misconfigurations'])
+        with self.assertRaises(ValueError):
+            checks.trivy_gate({"Results": []}, "config")
+        counts = checks.trivy_gate(
+            {
+                "Results": [
+                    {
+                        "Class": "config",
+                        "Target": "Dockerfile",
+                        "MisconfSummary": {"Failures": 1},
+                        "Misconfigurations": [{"Severity": "CRITICAL"}],
+                    }
+                ]
+            },
+            "config",
+        )
+        self.assertEqual(1, counts["misconfigurations"])
 
     def test_sarif_nonfinite_severity_fails(self):
-        for value in ('NaN', 'Infinity', '-1', '11'):
-            run={'invocations':[{'executionSuccessful':True}],'tool':{'driver':{'name':'CodeQL','rules':[{'id':'fixture','properties':{'security-severity':value}}]}},'results':[{'ruleId':'fixture'}]}
-            with self.assertRaises(ValueError): checks.sarif_gate([{'runs':[run]}])
+        for value in ("NaN", "Infinity", "-1", "11"):
+            run = {
+                "invocations": [{"executionSuccessful": True}],
+                "tool": {
+                    "driver": {
+                        "name": "CodeQL",
+                        "rules": [
+                            {
+                                "id": "fixture",
+                                "properties": {"security-severity": value},
+                            }
+                        ],
+                    }
+                },
+                "results": [{"ruleId": "fixture"}],
+            }
+            with self.assertRaises(ValueError):
+                checks.sarif_gate([{"runs": [run]}])
 
     def test_application_image_needs_java_and_os(self):
-        os_result={'Class':'os-pkgs','Packages':[{'Name':'libc','Version':'1'}]}
-        java_result={'Class':'lang-pkgs','Type':'jar','Packages':[{'Name':'spring-core','Version':'1'}]}
+        os_result = {"Class": "os-pkgs", "Packages": [{"Name": "libc", "Version": "1"}]}
+        java_result = {
+            "Class": "lang-pkgs",
+            "Type": "jar",
+            "Packages": [{"Name": "spring-core", "Version": "1"}],
+        }
         for results in ([os_result], [java_result]):
-            with self.assertRaises(ValueError):checks.trivy_gate({'Metadata':{'OS':{'Family':'ubuntu'}},'Results':results},'image',True)
-        self.assertFalse(any(checks.trivy_gate({'Metadata':{'OS':{'Family':'ubuntu'}},'Results':[os_result,java_result]},'image',True).values()))
+            with self.assertRaises(ValueError):
+                checks.trivy_gate(
+                    {"Metadata": {"OS": {"Family": "ubuntu"}}, "Results": results},
+                    "image",
+                    True,
+                )
+        self.assertFalse(
+            any(
+                checks.trivy_gate(
+                    {
+                        "Metadata": {"OS": {"Family": "ubuntu"}},
+                        "Results": [os_result, java_result],
+                    },
+                    "image",
+                    True,
+                ).values()
+            )
+        )
 
     def test_grouped_sarif_rules_are_resolved(self):
-        run={'invocations':[{'executionSuccessful':True}],'tool':{'driver':{'name':'CodeQL'},'extensions':[{'rules':[{'id':'fixture','properties':{'security-severity':'8'}}]}]},'results':[{'rule':{'id':'fixture'}}]}
-        self.assertEqual(1,checks.sarif_gate([{'runs':[run]}]))
+        run = {
+            "invocations": [{"executionSuccessful": True}],
+            "tool": {
+                "driver": {"name": "CodeQL"},
+                "extensions": [
+                    {
+                        "rules": [
+                            {"id": "fixture", "properties": {"security-severity": "8"}}
+                        ]
+                    }
+                ],
+            },
+            "results": [{"rule": {"id": "fixture"}}],
+        }
+        self.assertEqual(1, checks.sarif_gate([{"runs": [run]}]))
 
     def test_sast_exception_is_exact_expiring_and_hash_bound(self):
         with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory); source=root/'src/Security.java'; source.parent.mkdir(); source.write_text('fixture')
-            policy=root/'exceptions.json'
-            item={'ruleId':'fixture','file':'src/Security.java','sourceSha256':checks.hashlib.sha256(source.read_bytes()).hexdigest(),
-                  'expiresAt':'2026-10-19','ticket':'DLV-804','rationale':'Reviewed synthetic fixture.'}
-            policy.write_text(checks.json.dumps({'version':1,'exceptions':[item]}))
-            exceptions=checks.load_sast_exceptions(policy,root,date(2026,9,19))
-            run={'invocations':[{'executionSuccessful':True}],'tool':{'driver':{'name':'CodeQL','rules':[{'id':'fixture','properties':{'security-severity':'8'}}]}},
-                 'results':[{'ruleId':'fixture','locations':[{'physicalLocation':{'artifactLocation':{'uri':'src/Security.java'},'region':{'startLine':7}}}]}]}
-            details=[]; used=set()
-            self.assertEqual(0,checks.sarif_gate([{'runs':[run]}],details,exceptions,used))
-            self.assertEqual('reviewed-exception',details[0]['disposition'])
-            checks.require_all_exceptions_used(exceptions,used)
-            source.write_text('changed')
-            with self.assertRaises(ValueError):checks.load_sast_exceptions(policy,root,date(2026,9,19))
-            source.write_text('fixture'); item['expiresAt']='2026-09-18'; policy.write_text(checks.json.dumps({'version':1,'exceptions':[item]}))
-            with self.assertRaises(ValueError):checks.load_sast_exceptions(policy,root,date(2026,9,19))
+            root = Path(directory)
+            source = root / "src/Security.java"
+            source.parent.mkdir()
+            source.write_text("fixture")
+            policy = root / "exceptions.json"
+            item = {
+                "ruleId": "fixture",
+                "file": "src/Security.java",
+                "sourceSha256": checks.hashlib.sha256(source.read_bytes()).hexdigest(),
+                "expiresAt": "2026-10-19",
+                "ticket": "DLV-804",
+                "rationale": "Reviewed synthetic fixture.",
+            }
+            policy.write_text(checks.json.dumps({"version": 1, "exceptions": [item]}))
+            exceptions = checks.load_sast_exceptions(policy, root, date(2026, 9, 19))
+            run = {
+                "invocations": [{"executionSuccessful": True}],
+                "tool": {
+                    "driver": {
+                        "name": "CodeQL",
+                        "rules": [
+                            {"id": "fixture", "properties": {"security-severity": "8"}}
+                        ],
+                    }
+                },
+                "results": [
+                    {
+                        "ruleId": "fixture",
+                        "locations": [
+                            {
+                                "physicalLocation": {
+                                    "artifactLocation": {"uri": "src/Security.java"},
+                                    "region": {"startLine": 7},
+                                }
+                            }
+                        ],
+                    }
+                ],
+            }
+            details = []
+            used = set()
+            self.assertEqual(
+                0, checks.sarif_gate([{"runs": [run]}], details, exceptions, used)
+            )
+            self.assertEqual("reviewed-exception", details[0]["disposition"])
+            checks.require_all_exceptions_used(exceptions, used)
+            source.write_text("changed")
+            with self.assertRaises(ValueError):
+                checks.load_sast_exceptions(policy, root, date(2026, 9, 19))
+            source.write_text("fixture")
+            item["expiresAt"] = "2026-09-18"
+            policy.write_text(checks.json.dumps({"version": 1, "exceptions": [item]}))
+            with self.assertRaises(ValueError):
+                checks.load_sast_exceptions(policy, root, date(2026, 9, 19))
 
     def test_source_scan_disables_external_scanner_overrides(self):
-        report={'Results':[{'Class':'config','Target':'Dockerfile','MisconfSummary':{'Successes':1}}]}
-        with tempfile.TemporaryDirectory() as directory, patch.object(checks,'OUT',Path(directory)), patch.object(checks,'run') as execute, patch.object(checks,'read',return_value=report), patch.dict(checks.os.environ,{'TRIVY_IGNORE_UNFIXED':'true','TRIVY_CONFIG':'untrusted.yml'}):
-            checks.scan('config')
-            command=execute.call_args.args[0]
-            self.assertIn('--ignorefile',command)
-            self.assertIn('--config',command)
-            self.assertFalse(any(k.startswith('TRIVY_') for k in execute.call_args.kwargs['env']))
+        report = {
+            "Results": [
+                {
+                    "Class": "config",
+                    "Target": "Dockerfile",
+                    "MisconfSummary": {"Successes": 1},
+                }
+            ]
+        }
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(checks, "OUT", Path(directory)),
+            patch.object(checks, "run") as execute,
+            patch.object(checks, "read", return_value=report),
+            patch.dict(
+                checks.os.environ,
+                {"TRIVY_IGNORE_UNFIXED": "true", "TRIVY_CONFIG": "untrusted.yml"},
+            ),
+        ):
+            checks.scan("config")
+            command = execute.call_args.args[0]
+            self.assertIn("--ignorefile", command)
+            self.assertIn("--config", command)
+            self.assertFalse(
+                any(k.startswith("TRIVY_") for k in execute.call_args.kwargs["env"])
+            )
 
     def test_history_disables_inline_and_repository_suppressions(self):
-        with tempfile.TemporaryDirectory() as directory, patch.object(checks,'OUT',Path(directory)), patch.object(checks,'HISTORY_EXCEPTIONS',Path(directory)/'missing.json'), patch.object(checks,'run') as execute, patch.object(checks,'read',return_value=[]), patch.object(checks.subprocess,'check_output',return_value='false'), patch.dict(checks.os.environ,{'GITLEAKS_CONFIG':'untrusted.toml'}):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(checks, "OUT", Path(directory)),
+            patch.object(
+                checks, "HISTORY_EXCEPTIONS", Path(directory) / "missing.json"
+            ),
+            patch.object(checks, "run") as execute,
+            patch.object(checks, "read", return_value=[]),
+            patch.object(checks.subprocess, "check_output", return_value="false"),
+            patch.dict(checks.os.environ, {"GITLEAKS_CONFIG": "untrusted.toml"}),
+        ):
             checks.history()
-            command=execute.call_args.args[0]
-            self.assertIn('--ignore-gitleaks-allow',command)
-            self.assertIn('--gitleaks-ignore-path',command)
-            self.assertFalse(any(k.startswith('GITLEAKS_') for k in execute.call_args.kwargs['env']))
+            command = execute.call_args.args[0]
+            self.assertIn("--ignore-gitleaks-allow", command)
+            self.assertIn("--gitleaks-ignore-path", command)
+            self.assertFalse(
+                any(k.startswith("GITLEAKS_") for k in execute.call_args.kwargs["env"])
+            )
 
     def test_history_exception_matches_only_one_immutable_finding(self):
-        finding={'RuleID':'fixture','File':'src/Test.java','StartLine':7,'Commit':'a'*40}
+        finding = {
+            "RuleID": "fixture",
+            "File": "src/Test.java",
+            "StartLine": 7,
+            "Commit": "a" * 40,
+        }
         with tempfile.TemporaryDirectory() as directory:
-            policy=Path(directory)/'exceptions.json'
-            policy.write_text(checks.json.dumps({'version':1,'exceptions':[{**finding,'rationale':'Synthetic fixture already in immutable public history.'}]}))
-            checks.review_history([finding],policy)
-            with self.assertRaises(ValueError):checks.review_history([{**finding,'StartLine':8}],policy)
-            with self.assertRaises(ValueError):checks.review_history([],policy)
+            policy = Path(directory) / "exceptions.json"
+            policy.write_text(
+                checks.json.dumps(
+                    {
+                        "version": 1,
+                        "exceptions": [
+                            {
+                                **finding,
+                                "rationale": (
+                                    "Synthetic fixture already in immutable "
+                                    "public history."
+                                ),
+                            }
+                        ],
+                    }
+                )
+            )
+            checks.review_history([finding], policy)
+            with self.assertRaises(ValueError):
+                checks.review_history([{**finding, "StartLine": 8}], policy)
+            with self.assertRaises(ValueError):
+                checks.review_history([], policy)
 
     def test_repository_bases_use_reviewed_java21_alpine_pair(self):
-        images = checks.base_images((checks.ROOT / 'Dockerfile').read_text())
-        self.assertTrue(images[0].startswith('eclipse-temurin:21-jdk-alpine@sha256:'))
-        self.assertTrue(images[1].startswith('eclipse-temurin:21-jre-alpine@sha256:'))
-        for oldDigest in ('b468c3fc688b14450571494f588bd939378e7fd542ed5a73f8efc13f17872a87',
-                          '51ab5e3302e7141ce665ca3ea85e8b5cd648eafbc3c0c90dd79d6537684e4555'):
-            self.assertNotIn(oldDigest, ' '.join(images))
+        images = checks.base_images((checks.ROOT / "Dockerfile").read_text())
+        self.assertTrue(images[0].startswith("eclipse-temurin:21-jdk-alpine@sha256:"))
+        self.assertTrue(images[1].startswith("eclipse-temurin:21-jre-alpine@sha256:"))
+        for oldDigest in (
+            "b468c3fc688b14450571494f588bd939378e7fd542ed5a73f8efc13f17872a87",
+            "51ab5e3302e7141ce665ca3ea85e8b5cd648eafbc3c0c90dd79d6537684e4555",
+        ):
+            self.assertNotIn(oldDigest, " ".join(images))
 
     def test_both_base_stages_must_be_pinned(self):
-        valid='FROM eclipse-temurin:21-jdk@sha256:'+64*'a'+' AS build\nFROM eclipse-temurin:21-jre@sha256:'+64*'b'+' AS runtime'
-        self.assertEqual(2,len(checks.base_images(valid)))
-        self.assertEqual(2,len(checks.base_images(valid.replace("21-jdk@", "21-jdk-noble@").replace("21-jre@", "21-jre-noble@"))))
-        self.assertEqual(2,len(checks.base_images(valid.replace("21-jdk@", "21-jdk-noble@").replace("21-jre@", "21-jre-alpine@"))))
-        self.assertEqual(2, len(checks.base_images(valid.replace("21-jdk@", "21-jdk-alpine@").replace("21-jre@", "21-jre-alpine@"))))
-        for bad in [valid.replace("21-jdk@", "21-jdk-unknown@"), valid.replace("21-jre@", "21-jre-unknown@"), "\n".join(reversed(valid.splitlines()))]:
-            with self.assertRaises(ValueError):checks.base_images(bad)
-        for bad in ['FROM eclipse-temurin:21-jre', valid.splitlines()[0], valid.replace('21-jdk@sha256:'+64*'a','21-jdk'), valid.replace('21-jre@sha256:'+64*'b','21-jre-alpine'), valid.replace('eclipse-temurin:21-jre@','untrusted/java:21-jre@')]:
-            with self.assertRaises(ValueError):checks.base_images(bad)
+        valid = (
+            "FROM eclipse-temurin:21-jdk@sha256:"
+            + 64 * "a"
+            + " AS build\nFROM eclipse-temurin:21-jre@sha256:"
+            + 64 * "b"
+            + " AS runtime"
+        )
+        self.assertEqual(2, len(checks.base_images(valid)))
+        self.assertEqual(
+            2,
+            len(
+                checks.base_images(
+                    valid.replace("21-jdk@", "21-jdk-noble@").replace(
+                        "21-jre@", "21-jre-noble@"
+                    )
+                )
+            ),
+        )
+        self.assertEqual(
+            2,
+            len(
+                checks.base_images(
+                    valid.replace("21-jdk@", "21-jdk-noble@").replace(
+                        "21-jre@", "21-jre-alpine@"
+                    )
+                )
+            ),
+        )
+        self.assertEqual(
+            2,
+            len(
+                checks.base_images(
+                    valid.replace("21-jdk@", "21-jdk-alpine@").replace(
+                        "21-jre@", "21-jre-alpine@"
+                    )
+                )
+            ),
+        )
+        for bad in [
+            valid.replace("21-jdk@", "21-jdk-unknown@"),
+            valid.replace("21-jre@", "21-jre-unknown@"),
+            "\n".join(reversed(valid.splitlines())),
+        ]:
+            with self.assertRaises(ValueError):
+                checks.base_images(bad)
+        for bad in [
+            "FROM eclipse-temurin:21-jre",
+            valid.splitlines()[0],
+            valid.replace("21-jdk@sha256:" + 64 * "a", "21-jdk"),
+            valid.replace("21-jre@sha256:" + 64 * "b", "21-jre-alpine"),
+            valid.replace("eclipse-temurin:21-jre@", "untrusted/java:21-jre@"),
+        ]:
+            with self.assertRaises(ValueError):
+                checks.base_images(bad)
 
-if __name__=='__main__':unittest.main()
+
+if __name__ == "__main__":
+    unittest.main()
